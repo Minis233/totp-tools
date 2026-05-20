@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>汇率换算</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="实时汇率换算，数据来自开源免费汇率 API。">
+  <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" data-sidebar></aside>
+    <main>
+      <div class="panel">
+        <h1>汇率换算</h1>
+        <p class="lead">数据来自 <a href="https://frankfurter.dev/" target="_blank" rel="noopener">Frankfurter</a>（欧洲央行 ECB 公开数据），免费、无需 API Key。</p>
+        <hr>
+
+        <div class="grid-2">
+          <div class="col">
+            <label class="muted small">从</label>
+            <div class="swap-row">
+              <input id="amtFrom" class="input" type="number" value="100" step="any">
+              <select id="curFrom"></select>
+            </div>
+          </div>
+          <div class="col">
+            <label class="muted small">到</label>
+            <div class="swap-row">
+              <input id="amtTo" class="input" type="number" step="any">
+              <select id="curTo"></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:14px">
+          <button id="swap" class="btn ghost">⇄ 互换</button>
+          <button id="refresh" class="btn">刷新汇率</button>
+          <span id="status" class="muted small"></span>
+        </div>
+
+        <hr>
+
+        <h3 style="margin:0 0 8px">基准 1 单位（<span id="baseLabel">USD</span>）兑常用货币</h3>
+        <table class="rates" id="rates-table">
+          <thead><tr><th>币种</th><th>代码</th><th>汇率</th></tr></thead>
+          <tbody></tbody>
+        </table>
+
+        <p class="small muted" style="margin-top:14px">汇率仅供参考，实际成交以银行 / 交易所为准。</p>
+      </div>
+      <footer class="foot">© 在线工具 · 开源 MIT</footer>
+    </main>
+  </div>
+
+  <script src="assets/js/common.js"></script>
+  <script>
+  (function(){
+    'use strict';
+    const $ = s => document.querySelector(s);
+    // Frankfurter 支持的常用币种
+    const CCY = [
+      ['USD','美元'], ['EUR','欧元'], ['CNY','人民币'], ['JPY','日元'],
+      ['GBP','英镑'], ['HKD','港币'], ['KRW','韩元'],
+      ['SGD','新加坡元'], ['AUD','澳元'], ['CAD','加元'], ['CHF','瑞士法郎'],
+      ['NZD','新西兰元'], ['THB','泰铢'], ['MYR','马来西亚林吉特'], ['IDR','印尼盾'],
+      ['INR','印度卢比'], ['PHP','菲律宾比索'], ['BRL','巴西雷亚尔'], ['MXN','墨西哥比索'],
+      ['TRY','土耳其里拉'], ['ZAR','南非兰特'], ['SEK','瑞典克朗'],
+      ['NOK','挪威克朗'], ['DKK','丹麦克朗'], ['PLN','波兰兹罗提'], ['CZK','捷克克朗'],
+      ['HUF','匈牙利福林'], ['ILS','以色列新谢克尔'], ['RON','罗马尼亚列伊'], ['ISK','冰岛克朗']
+    ];
+    const COMMON = ['USD','EUR','CNY','JPY','GBP','HKD','TWD','KRW','SGD','AUD','CAD','CHF'];
+
+    let rates = null; // map base->{[code]: rate}
+    let activeBase = 'USD';
+
+    function fillSelect(el, defVal){
+      el.innerHTML = CCY.map(([c,n]) => `<option value="${c}">${c} · ${n}</option>`).join('');
+      el.value = defVal;
+    }
+    fillSelect($('#curFrom'), 'USD');
+    fillSelect($('#curTo'), 'CNY');
+
+    async function fetchRates(base){
+      try{
+        $('#status').textContent = '加载中…';
+        const url = `https://api.frankfurter.dev/v1/latest?base=${base}`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        if(!data || !data.rates) throw new Error('返回数据异常');
+        // ensure base itself = 1
+        data.rates[base] = 1;
+        rates = data;
+        activeBase = base;
+        $('#baseLabel').textContent = base;
+        $('#status').textContent = '已更新 · ' + (data.date || '');
+        renderTable();
+        compute();
+      } catch(e){
+        $('#status').textContent = '加载失败：' + e.message;
+      }
+    }
+
+    function renderTable(){
+      const tb = $('#rates-table tbody');
+      tb.innerHTML = '';
+      for(const [c,n] of CCY){
+        if(c === activeBase) continue;
+        if(!rates.rates[c]) continue;
+        const r = rates.rates[c];
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${n}</td><td>${c}</td><td>${formatRate(r)}</td>`;
+        tb.appendChild(tr);
+      }
+    }
+    function formatRate(r){
+      if(r >= 100) return r.toFixed(2);
+      if(r >= 1) return r.toFixed(4);
+      return r.toPrecision(5);
+    }
+
+    function convert(amount, from, to){
+      if(!rates) return null;
+      // need to express via base
+      if(from === activeBase){
+        return amount * (rates.rates[to] || (to === activeBase ? 1 : 0));
+      }
+      // convert via base
+      const fromRate = rates.rates[from];
+      const toRate = rates.rates[to];
+      if(!fromRate || !toRate) return null;
+      const inBase = amount / fromRate;
+      return inBase * toRate;
+    }
+
+    function compute(reverse){
+      const from = $('#curFrom').value, to = $('#curTo').value;
+      if(reverse){
+        const amount = parseFloat($('#amtTo').value);
+        if(isNaN(amount)) return;
+        const v = convert(amount, to, from);
+        if(v != null) $('#amtFrom').value = +v.toFixed(6);
+      } else {
+        const amount = parseFloat($('#amtFrom').value);
+        if(isNaN(amount)) return;
+        const v = convert(amount, from, to);
+        if(v != null) $('#amtTo').value = +v.toFixed(6);
+      }
+    }
+
+    $('#amtFrom').addEventListener('input', () => compute(false));
+    $('#amtTo').addEventListener('input', () => compute(true));
+    $('#curFrom').addEventListener('change', () => {
+      const f = $('#curFrom').value;
+      // refetch if not already covered
+      if(!rates || rates.rates[f] === undefined) fetchRates(f);
+      else compute(false);
+    });
+    $('#curTo').addEventListener('change', () => compute(false));
+    $('#swap').addEventListener('click', () => {
+      const f = $('#curFrom').value, t = $('#curTo').value;
+      $('#curFrom').value = t; $('#curTo').value = f;
+      const af = $('#amtFrom').value;
+      $('#amtFrom').value = $('#amtTo').value; $('#amtTo').value = af;
+      // refetch from current base if needed
+      if(!rates || rates.rates[t] === undefined) fetchRates(t);
+      else { activeBase = t; renderTable(); compute(false); $('#baseLabel').textContent = t; }
+    });
+    $('#refresh').addEventListener('click', () => fetchRates($('#curFrom').value));
+
+    fetchRates('USD');
+  })();
+  </script>
+</body>
+</html>

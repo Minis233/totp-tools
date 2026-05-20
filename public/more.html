@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>更多工具</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="UUID 生成 / 密码生成 / 时间戳 / 哈希计算 / 二维码生成 等常用小工具。">
+  <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <script src="assets/js/qrcode.min.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" data-sidebar></aside>
+    <main>
+      <div class="panel">
+        <h1>更多工具</h1>
+        <p class="lead">一组常用的纯前端小工具，全部在浏览器本地运行，不上传任何数据。</p>
+        <hr>
+
+        <div class="tabs">
+          <div class="tab active" data-tab="uuid">UUID</div>
+          <div class="tab" data-tab="pwd">密码生成</div>
+          <div class="tab" data-tab="ts">时间戳</div>
+          <div class="tab" data-tab="hash">哈希</div>
+          <div class="tab" data-tab="qr">二维码</div>
+        </div>
+
+        <!-- UUID -->
+        <section data-pane="uuid">
+          <div class="row">
+            <input id="uuid-out" class="input" readonly>
+            <button id="uuid-gen" class="btn">生成</button>
+            <button id="uuid-copy" class="btn ghost">复制</button>
+          </div>
+          <p class="muted small">生成 UUID v4（基于 crypto.randomUUID 或 randomValues 回退）。</p>
+        </section>
+
+        <!-- Password -->
+        <section data-pane="pwd" hidden>
+          <div class="row">
+            <input id="pwd-out" class="input" readonly>
+            <button id="pwd-gen" class="btn">生成</button>
+            <button id="pwd-copy" class="btn ghost">复制</button>
+          </div>
+          <div class="row">
+            <label class="muted small">长度</label>
+            <input id="pwd-len" class="input" type="number" min="4" max="128" value="20" style="max-width:120px">
+            <label class="flex"><input id="pwd-up" type="checkbox" checked>大写</label>
+            <label class="flex"><input id="pwd-low" type="checkbox" checked>小写</label>
+            <label class="flex"><input id="pwd-num" type="checkbox" checked>数字</label>
+            <label class="flex"><input id="pwd-sym" type="checkbox">符号</label>
+            <label class="flex"><input id="pwd-amb" type="checkbox" checked>排除易混淆</label>
+          </div>
+        </section>
+
+        <!-- Timestamp -->
+        <section data-pane="ts" hidden>
+          <div class="kv"><span class="label">当前时间戳（秒）</span><span id="ts-now-s" class="value"></span></div>
+          <div class="kv"><span class="label">当前时间戳（毫秒）</span><span id="ts-now-ms" class="value"></span></div>
+          <hr>
+          <div class="grid-2">
+            <div class="col">
+              <label class="muted small">时间戳 → 日期</label>
+              <input id="ts-in" class="input" placeholder="如 1700000000 或 1700000000000">
+              <div id="ts-out" class="muted small"></div>
+            </div>
+            <div class="col">
+              <label class="muted small">日期 → 时间戳</label>
+              <input id="dt-in" class="input" type="datetime-local">
+              <div id="dt-out" class="muted small"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Hash -->
+        <section data-pane="hash" hidden>
+          <textarea id="hash-in" class="textarea" placeholder="输入要计算哈希的文本..."></textarea>
+          <div class="row" style="margin-top:8px">
+            <button class="btn" data-hash="SHA-1">SHA-1</button>
+            <button class="btn" data-hash="SHA-256">SHA-256</button>
+            <button class="btn" data-hash="SHA-384">SHA-384</button>
+            <button class="btn" data-hash="SHA-512">SHA-512</button>
+          </div>
+          <div class="kv" style="margin-top:8px"><span class="label" id="hash-name">结果</span><span id="hash-out" class="value muted"></span></div>
+          <p class="muted small">注：MD5 不在 Web Crypto 标准中，本工具仅提供安全 SHA 系列。</p>
+        </section>
+
+        <!-- QR -->
+        <section data-pane="qr" hidden>
+          <textarea id="qr-text" class="textarea" placeholder="输入文本或 URL..."></textarea>
+          <div class="row" style="margin-top:8px">
+            <button id="qr-gen" class="btn">生成二维码</button>
+            <button id="qr-download" class="btn ghost">下载 PNG</button>
+          </div>
+          <div id="qr-box" style="margin-top:14px;display:flex;justify-content:center"></div>
+        </section>
+      </div>
+      <footer class="foot">© 在线工具 · 开源 MIT</footer>
+    </main>
+  </div>
+
+  <script src="assets/js/common.js"></script>
+  <script>
+  (function(){
+    'use strict';
+    const $ = s => document.querySelector(s);
+
+    // Tabs
+    document.querySelectorAll('.tab').forEach(t => {
+      t.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        document.querySelectorAll('[data-pane]').forEach(p => p.hidden = (p.dataset.pane !== t.dataset.tab));
+      });
+    });
+
+    // ---- UUID ----
+    function uuidV4(){
+      if(crypto.randomUUID) return crypto.randomUUID();
+      const b = new Uint8Array(16);
+      crypto.getRandomValues(b);
+      b[6] = (b[6] & 0x0f) | 0x40;
+      b[8] = (b[8] & 0x3f) | 0x80;
+      const h = Array.from(b, x => x.toString(16).padStart(2,'0'));
+      return `${h.slice(0,4).join('')}-${h.slice(4,6).join('')}-${h.slice(6,8).join('')}-${h.slice(8,10).join('')}-${h.slice(10).join('')}`;
+    }
+    function genUUID(){ $('#uuid-out').value = uuidV4(); }
+    $('#uuid-gen').addEventListener('click', genUUID);
+    $('#uuid-copy').addEventListener('click', () => {
+      const v = $('#uuid-out').value; if(!v) return window.toast('请先生成');
+      window.copyText(v).then(ok => ok && window.toast('已复制'));
+    });
+    genUUID();
+
+    // ---- Password ----
+    function randInt(max){
+      const r = new Uint32Array(1);
+      const limit = Math.floor(0x100000000 / max) * max;
+      while(true){ crypto.getRandomValues(r); if(r[0] < limit) return r[0] % max; }
+    }
+    function genPwd(){
+      const len = Math.max(4, Math.min(128, parseInt($('#pwd-len').value, 10) || 20));
+      let pool = '';
+      let UP = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      let LO = 'abcdefghijklmnopqrstuvwxyz';
+      let NU = '0123456789';
+      let SY = '!@#$%^&*()-_=+[]{};:,.<>?';
+      const amb = $('#pwd-amb').checked;
+      if(amb){ UP = UP.replace(/[OI]/g,''); LO = LO.replace(/[lo]/g,''); NU = NU.replace(/[01]/g,''); }
+      const groups = [];
+      if($('#pwd-up').checked){ pool += UP; groups.push(UP); }
+      if($('#pwd-low').checked){ pool += LO; groups.push(LO); }
+      if($('#pwd-num').checked){ pool += NU; groups.push(NU); }
+      if($('#pwd-sym').checked){ pool += SY; groups.push(SY); }
+      if(!pool){ window.toast('至少勾选一项'); return; }
+      const arr = [];
+      // ensure at least one from each group
+      for(const g of groups) arr.push(g[randInt(g.length)]);
+      while(arr.length < len) arr.push(pool[randInt(pool.length)]);
+      // shuffle
+      for(let i = arr.length - 1; i > 0; i--){
+        const j = randInt(i + 1); [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      $('#pwd-out').value = arr.join('');
+    }
+    $('#pwd-gen').addEventListener('click', genPwd);
+    $('#pwd-copy').addEventListener('click', () => {
+      const v = $('#pwd-out').value; if(!v) return window.toast('请先生成');
+      window.copyText(v).then(ok => ok && window.toast('已复制'));
+    });
+    genPwd();
+
+    // ---- Timestamp ----
+    function tickTS(){
+      const ms = Date.now(); const s = Math.floor(ms / 1000);
+      $('#ts-now-s').textContent = s;
+      $('#ts-now-ms').textContent = ms;
+    }
+    setInterval(tickTS, 1000); tickTS();
+    $('#ts-in').addEventListener('input', () => {
+      const v = $('#ts-in').value.trim();
+      if(!v){ $('#ts-out').textContent = ''; return; }
+      let n = Number(v);
+      if(isNaN(n)){ $('#ts-out').textContent = '非数字'; return; }
+      if(v.length <= 10) n = n * 1000;
+      const d = new Date(n);
+      $('#ts-out').innerHTML = `本地时间 <b>${d.toLocaleString()}</b><br>UTC <b>${d.toUTCString()}</b><br>ISO <b>${d.toISOString()}</b>`;
+    });
+    $('#dt-in').addEventListener('input', () => {
+      const v = $('#dt-in').value;
+      if(!v){ $('#dt-out').textContent = ''; return; }
+      const t = new Date(v).getTime();
+      $('#dt-out').innerHTML = `秒 <b>${Math.floor(t/1000)}</b> · 毫秒 <b>${t}</b>`;
+    });
+
+    // ---- Hash ----
+    document.querySelectorAll('[data-hash]').forEach(b => b.addEventListener('click', async () => {
+      const algo = b.dataset.hash;
+      const data = new TextEncoder().encode($('#hash-in').value);
+      const buf = await crypto.subtle.digest(algo, data);
+      const hex = Array.from(new Uint8Array(buf), x => x.toString(16).padStart(2,'0')).join('');
+      $('#hash-name').textContent = algo;
+      $('#hash-out').textContent = hex;
+    }));
+
+    // ---- QR ----
+    let lastQR = null;
+    $('#qr-gen').addEventListener('click', () => {
+      const t = $('#qr-text').value.trim();
+      if(!t){ return window.toast('请输入内容'); }
+      const box = $('#qr-box');
+      box.innerHTML = '';
+      lastQR = new QRCode(box, { text: t, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.M });
+    });
+    $('#qr-download').addEventListener('click', () => {
+      if(!lastQR){ return window.toast('请先生成'); }
+      const cv = $('#qr-box canvas');
+      const img = $('#qr-box img');
+      const src = cv ? cv.toDataURL('image/png') : (img ? img.src : null);
+      if(!src) return;
+      const a = document.createElement('a');
+      a.href = src; a.download = 'qrcode.png';
+      document.body.appendChild(a); a.click(); a.remove();
+    });
+  })();
+  </script>
+</body>
+</html>

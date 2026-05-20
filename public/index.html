@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>2FA验证码工具</title>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="谷歌身份验证器网页版，开源 2FA / TOTP 在线生成工具。">
+  <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <script src="assets/js/otpauth.umd.min.js"></script>
+  <script src="assets/js/qrcode.min.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" data-sidebar></aside>
+    <main>
+      <div class="panel">
+        <h1>2FA 验证</h1>
+        <p class="lead">双重验证码 / 二步验证码生成工具（谷歌身份验证器的网页版），输入 Base32 密钥即可获取 6 位 TOTP。</p>
+        <hr>
+
+        <div class="section">
+          <div class="row">
+            <input id="secret-input" class="input" type="text" placeholder="点击此处输入密钥（Base32）" autocomplete="off" autocapitalize="characters" spellcheck="false">
+          </div>
+          <div class="row">
+            <button id="btn-get" class="btn">点击获取验证码</button>
+            <button id="btn-qr" class="btn ghost">生成二维码</button>
+            <span class="muted small">本工具完全在浏览器本地运行，密钥不会上传服务器。</span>
+          </div>
+          <div class="kv"><span class="label">双重密钥</span><span id="key-out" class="value"></span></div>
+          <div class="kv"><span class="label">当前验证码</span><span id="code-out" class="code"></span></div>
+          <div class="kv"><span class="label">剩余时间</span><span id="timer" class="value">--</span> 秒</div>
+        </div>
+
+        <hr>
+
+        <div class="section">
+          <label class="muted small" for="keys-area">本地密钥记录（可备注，仅保存在浏览器本地）</label>
+          <textarea id="keys-area" class="textarea" placeholder="历史密钥与备注..."></textarea>
+          <div class="row" style="margin-top:10px">
+            <button id="btn-clear" class="btn danger">清除本地记录</button>
+          </div>
+        </div>
+
+        <hr>
+
+        <h3 style="margin:0 0 10px">2FA 工具说明</h3>
+        <div class="tip">
+          <strong>演示密钥</strong>：<span id="demo-key" class="demo-key">7J64V3P3E77J3LKNUGSZ5QANTLRLTKVL</span>（点击复制）<br>
+          <strong>新手提示</strong>：必须在倒计时结束前输入验证码登录或验证，否则会失效。请输入正确编码的 Base32 密钥（A–Z 与 2–7）。点击「点击获取验证码」会自动复制结果到剪切板。<br>
+          <strong>更多方式</strong>：在网址后追加密钥参数也可直接显示，例如 <code>?key=7J64V3P3E77J3LKNUGSZ5QANTLRLTKVL</code>。<br>
+          <strong>开源地址</strong>：本站完全开源，源码托管于 GitHub，可自行部署到 Cloudflare Pages 免费运行。
+        </div>
+      </div>
+      <footer class="foot">© 在线工具 · 开源 MIT</footer>
+    </main>
+  </div>
+
+  <div id="qr-modal" class="modal" role="dialog" aria-modal="true">
+    <div class="modal-content">
+      <span class="close" data-close>×</span>
+      <div id="qrcode"></div>
+      <p class="qr-text">使用 Google Authenticator 或 1Password 等 App 扫描即可添加。</p>
+    </div>
+  </div>
+
+  <script src="assets/js/common.js"></script>
+  <script>
+  (function(){
+    'use strict';
+    const PERIOD = 30, DIGITS = 6, ALGO = 'SHA1';
+    const STORAGE = window.localStorage;
+    const $ = (sel) => document.querySelector(sel);
+
+    let serverOffsetMs = 0;
+    let secondTimer = null, windowTimer = null;
+    const nowMs = () => Date.now() + serverOffsetMs;
+
+    async function syncClock(){
+      try{
+        const t0 = performance.now();
+        const res = await fetch(location.href, { method: 'HEAD', cache: 'no-store' });
+        const dateStr = res.headers.get('Date');
+        if(!dateStr) return;
+        const t1 = performance.now();
+        const rtt = t1 - t0;
+        serverOffsetMs = (new Date(dateStr).getTime() + rtt/2) - Date.now();
+      } catch(e){}
+    }
+
+    function tickInfo(tsMs){
+      const sec = Math.floor(tsMs / 1000);
+      const into = sec % PERIOD;
+      const left = (PERIOD - 1) - into; // matches reference behaviour
+      const nextSecondMs = (sec + 1) * 1000;
+      const nextWindowMs = (sec - into + PERIOD) * 1000;
+      return { sec, into, left, nextSecondMs, nextWindowMs };
+    }
+
+    function genTOTP(secret, tsMs){
+      const totp = new OTPAuth.TOTP({
+        algorithm: ALGO, digits: DIGITS, period: PERIOD,
+        secret: OTPAuth.Secret.fromBase32(secret)
+      });
+      return totp.generate({ timestamp: tsMs });
+    }
+
+    function validateSecret(raw){
+      if(!raw) return null;
+      const s = String(raw).replace(/\s+/g, '').toUpperCase();
+      if(s.length < 16){ window.toast('密钥太短，请重新输入。'); return null; }
+      if(s.length > 128){ window.toast('密钥过长，请重新输入。'); return null; }
+      if(!/^[A-Z2-7]+$/.test(s)){ window.toast('非正确编码的密钥，请使用 Base32（A–Z, 2–7）。'); return null; }
+      return s;
+    }
+
+    function update(secret, tsMs, opts = {}){
+      let code;
+      try{ code = genTOTP(secret, tsMs); }
+      catch(e){ window.toast('密钥解析失败：' + e.message); return null; }
+      $('#key-out').textContent = secret;
+      $('#code-out').textContent = code;
+      $('#code-out').classList.remove('warn');
+      STORAGE.setItem('lastKey', secret);
+      if(!opts.silent) window.toast('已成功获取验证码');
+      return code;
+    }
+
+    function prependRecord(secret){
+      const d = new Date();
+      const ds = `${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()}`;
+      const newLine = `${ds} - ${secret}`;
+      const ta = $('#keys-area');
+      const existing = ta.value.trim();
+      const merged = (newLine + (existing ? '\n' + existing : '')).split('\n');
+      const unique = Array.from(new Set(merged));
+      ta.value = unique.join('\n');
+      STORAGE.setItem('keysAll', ta.value);
+    }
+
+    function scheduleSecond(){
+      clearTimeout(secondTimer);
+      const { nextSecondMs } = tickInfo(nowMs());
+      secondTimer = setTimeout(onSecond, Math.max(0, nextSecondMs - nowMs()));
+    }
+    function scheduleWindow(){
+      clearTimeout(windowTimer);
+      const { nextWindowMs } = tickInfo(nowMs());
+      windowTimer = setTimeout(onWindow, Math.max(0, nextWindowMs - nowMs()));
+    }
+    function onSecond(){
+      $('#timer').textContent = tickInfo(nowMs()).left;
+      scheduleSecond();
+    }
+    function onWindow(){
+      const s = validateSecret($('#secret-input').value);
+      if(s) update(s, nowMs(), { silent: true });
+      $('#timer').textContent = PERIOD - 1;
+      scheduleWindow();
+    }
+
+    function showQR(){
+      let s = $('#secret-input').value;
+      if(!s){ return window.toast('密钥未填写'); }
+      s = validateSecret(s);
+      if(!s) return;
+      const last7 = s.slice(-7);
+      const totp = new OTPAuth.TOTP({
+        algorithm: ALGO, digits: DIGITS, period: PERIOD,
+        secret: OTPAuth.Secret.fromBase32(s),
+        label: 'Handy tool', issuer: '2fa.run|...' + last7
+      });
+      const uri = totp.toString();
+      const box = $('#qrcode');
+      box.innerHTML = '';
+      new QRCode(box, { text: uri, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.M });
+      $('#qr-modal').classList.add('open');
+    }
+
+    function closeModal(){ $('#qr-modal').classList.remove('open'); }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      // restore state
+      $('#secret-input').value = STORAGE.getItem('lastKey') || '';
+      $('#keys-area').value = STORAGE.getItem('keysAll') || '';
+
+      // querystring or path-based key (mimic /2fa/<secret>)
+      const url = new URL(location.href);
+      let auto = url.searchParams.get('key');
+      const m = url.pathname.match(/\/2fa\/([A-Za-z2-7]+)\/?$/);
+      if(!auto && m) auto = m[1];
+      if(auto){
+        const v = validateSecret(auto);
+        if(v){ $('#secret-input').value = v; update(v, nowMs(), { silent: true }); prependRecord(v); }
+      }
+
+      await syncClock();
+      $('#timer').textContent = tickInfo(nowMs()).left;
+      scheduleSecond();
+      scheduleWindow();
+
+      // re-render existing key
+      const existing = $('#secret-input').value;
+      if(existing){
+        const v = validateSecret(existing);
+        if(v) update(v, nowMs(), { silent: true });
+      }
+    });
+
+    $('#btn-get').addEventListener('click', () => {
+      const s = validateSecret($('#secret-input').value);
+      if(!s) return;
+      const code = update(s, nowMs());
+      prependRecord(s);
+      if(code) window.copyText(code);
+    });
+    $('#btn-qr').addEventListener('click', showQR);
+    $('#btn-clear').addEventListener('click', () => {
+      $('#keys-area').value = '';
+      STORAGE.setItem('keysAll', '');
+      window.toast('已清除本地记录');
+    });
+    document.addEventListener('input', (e) => {
+      if(e.target && e.target.id === 'keys-area'){
+        STORAGE.setItem('keysAll', e.target.value);
+      }
+    });
+    document.addEventListener('click', (e) => {
+      if(e.target && e.target.matches('[data-close]')) closeModal();
+      if(e.target && e.target.id === 'qr-modal') closeModal();
+    });
+    document.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeModal(); });
+    document.getElementById('demo-key').addEventListener('click', () => {
+      const k = document.getElementById('demo-key').textContent.trim();
+      window.copyText(k);
+      window.toast('已复制测试密钥');
+    });
+    document.addEventListener('visibilitychange', async () => {
+      if(document.visibilityState === 'visible'){
+        await syncClock();
+        scheduleSecond(); scheduleWindow();
+      }
+    });
+  })();
+  </script>
+</body>
+</html>

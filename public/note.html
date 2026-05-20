@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>文本处理</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="文本处理工具：去重、排序、大小写转换、字数统计、Base64 / URL 编解码、JSON 格式化。">
+  <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" data-sidebar></aside>
+    <main>
+      <div class="panel">
+        <h1>文本处理</h1>
+        <p class="lead">常用纯前端文本处理：去重 / 排序 / 大小写 / 字数 / 编解码 / JSON 格式化。</p>
+        <hr>
+
+        <div class="grid-2">
+          <div class="col">
+            <label class="muted small">输入</label>
+            <textarea id="in" class="textarea" placeholder="在此粘贴文本..."></textarea>
+            <div class="text-counter" id="counter">
+              <span>字符 <b>0</b></span><span>不含空格 <b>0</b></span>
+              <span>词 <b>0</b></span><span>行 <b>0</b></span><span>字节 <b>0</b></span>
+            </div>
+          </div>
+          <div class="col">
+            <label class="muted small">输出</label>
+            <textarea id="out" class="textarea" placeholder="处理后的结果..." readonly></textarea>
+            <div class="row" style="margin-top:6px">
+              <button id="copy-out" class="btn ghost btn-sm">复制结果</button>
+              <button id="swap" class="btn ghost btn-sm">输出 ➜ 输入</button>
+            </div>
+          </div>
+        </div>
+
+        <hr>
+        <div class="row" style="gap:8px">
+          <button class="btn btn-sm" data-op="trim">去首尾空白</button>
+          <button class="btn btn-sm" data-op="trimLines">每行 trim</button>
+          <button class="btn btn-sm" data-op="dedupe">去重（保序）</button>
+          <button class="btn btn-sm" data-op="dedupeSorted">去重 + 排序</button>
+          <button class="btn btn-sm" data-op="sortAsc">升序</button>
+          <button class="btn btn-sm" data-op="sortDesc">降序</button>
+          <button class="btn btn-sm" data-op="reverse">反转行序</button>
+          <button class="btn btn-sm" data-op="removeEmpty">删除空行</button>
+          <button class="btn btn-sm" data-op="upper">全部大写</button>
+          <button class="btn btn-sm" data-op="lower">全部小写</button>
+          <button class="btn btn-sm" data-op="title">标题大小写</button>
+          <button class="btn btn-sm" data-op="b64enc">Base64 编码</button>
+          <button class="btn btn-sm" data-op="b64dec">Base64 解码</button>
+          <button class="btn btn-sm" data-op="urlenc">URL 编码</button>
+          <button class="btn btn-sm" data-op="urldec">URL 解码</button>
+          <button class="btn btn-sm" data-op="jsonFormat">JSON 美化</button>
+          <button class="btn btn-sm" data-op="jsonMin">JSON 压缩</button>
+          <button class="btn btn-sm" data-op="lineNum">添加行号</button>
+        </div>
+      </div>
+      <footer class="foot">© 在线工具 · 开源 MIT</footer>
+    </main>
+  </div>
+
+  <script src="assets/js/common.js"></script>
+  <script>
+  (function(){
+    'use strict';
+    const $ = (s) => document.querySelector(s);
+    const inEl = $('#in'), outEl = $('#out');
+
+    const ops = {
+      trim: t => t.trim(),
+      trimLines: t => t.split('\n').map(l => l.trim()).join('\n'),
+      dedupe: t => Array.from(new Set(t.split('\n'))).join('\n'),
+      dedupeSorted: t => Array.from(new Set(t.split('\n'))).sort().join('\n'),
+      sortAsc: t => t.split('\n').sort().join('\n'),
+      sortDesc: t => t.split('\n').sort().reverse().join('\n'),
+      reverse: t => t.split('\n').reverse().join('\n'),
+      removeEmpty: t => t.split('\n').filter(l => l.trim() !== '').join('\n'),
+      upper: t => t.toUpperCase(),
+      lower: t => t.toLowerCase(),
+      title: t => t.replace(/\b([a-z])/g, (_, c) => c.toUpperCase()),
+      b64enc: t => {
+        try{
+          return btoa(unescape(encodeURIComponent(t)));
+        } catch(e){ throw new Error('Base64 编码失败'); }
+      },
+      b64dec: t => {
+        try{
+          return decodeURIComponent(escape(atob(t.trim())));
+        } catch(e){ throw new Error('Base64 解码失败：内容非合法 Base64'); }
+      },
+      urlenc: t => encodeURIComponent(t),
+      urldec: t => {
+        try { return decodeURIComponent(t); }
+        catch(e){ throw new Error('URL 解码失败：非合法的 percent-encoded 字符串'); }
+      },
+      jsonFormat: t => {
+        try{ return JSON.stringify(JSON.parse(t), null, 2); }
+        catch(e){ throw new Error('JSON 解析失败：' + e.message); }
+      },
+      jsonMin: t => {
+        try{ return JSON.stringify(JSON.parse(t)); }
+        catch(e){ throw new Error('JSON 解析失败：' + e.message); }
+      },
+      lineNum: t => {
+        const lines = t.split('\n');
+        const w = String(lines.length).length;
+        return lines.map((l, i) => String(i+1).padStart(w, ' ') + '  ' + l).join('\n');
+      },
+    };
+
+    function updateCounter(){
+      const t = inEl.value;
+      const chars = [...t].length;
+      const noSpaces = [...t.replace(/\s/g, '')].length;
+      const words = t.trim() ? t.trim().split(/\s+/).length : 0;
+      const lines = t === '' ? 0 : t.split('\n').length;
+      const bytes = new Blob([t]).size;
+      $('#counter').innerHTML = `
+        <span>字符 <b>${chars}</b></span>
+        <span>不含空格 <b>${noSpaces}</b></span>
+        <span>词 <b>${words}</b></span>
+        <span>行 <b>${lines}</b></span>
+        <span>字节 <b>${bytes}</b></span>`;
+    }
+    inEl.addEventListener('input', updateCounter);
+
+    document.querySelectorAll('[data-op]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const op = btn.dataset.op;
+        try {
+          outEl.value = ops[op](inEl.value);
+          window.toast('已处理');
+        } catch(e){
+          window.toast(e.message);
+        }
+      });
+    });
+    $('#copy-out').addEventListener('click', () => {
+      if(!outEl.value){ return window.toast('结果为空'); }
+      window.copyText(outEl.value).then(ok => ok && window.toast('已复制'));
+    });
+    $('#swap').addEventListener('click', () => {
+      inEl.value = outEl.value; outEl.value = '';
+      updateCounter();
+    });
+
+    updateCounter();
+  })();
+  </script>
+</body>
+</html>
