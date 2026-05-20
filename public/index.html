@@ -2,59 +2,54 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <title>2FA验证码工具</title>
+  <title>2FA 多账号管理器</title>
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="谷歌身份验证器网页版，开源 2FA / TOTP 在线生成工具。">
+  <meta name="description" content="开源 2FA / TOTP 多账号管理器，支持扫码导入、相册导入、Base32 手动添加。">
   <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
   <link rel="stylesheet" href="assets/css/style.css">
   <script src="assets/js/otpauth.umd.min.js"></script>
   <script src="assets/js/qrcode.min.js"></script>
+  <script src="assets/js/jsQR.js"></script>
 </head>
 <body>
   <div class="layout">
     <aside class="sidebar" data-sidebar></aside>
     <main>
       <div class="panel">
-        <h1>2FA 验证</h1>
-        <p class="lead">双重验证码 / 二步验证码生成工具（谷歌身份验证器的网页版），输入 Base32 密钥即可获取 6 位 TOTP。</p>
+        <h1>🔐 2FA 多账号管理器</h1>
+        <p class="lead">本地保存多组 TOTP 密钥，自动按 30 秒周期刷新。所有数据只存在浏览器本地，不上传服务端。</p>
         <hr>
 
-        <div class="section">
-          <div class="row">
-            <input id="secret-input" class="input" type="text" placeholder="点击此处输入密钥（Base32）" autocomplete="off" autocapitalize="characters" spellcheck="false">
-          </div>
-          <div class="row">
-            <button id="btn-get" class="btn">点击获取验证码</button>
-            <button id="btn-qr" class="btn ghost">生成二维码</button>
-            <span class="muted small">本工具完全在浏览器本地运行，密钥不会上传服务器。</span>
-          </div>
-          <div class="kv"><span class="label">双重密钥</span><span id="key-out" class="value"></span></div>
-          <div class="kv"><span class="label">当前验证码</span><span id="code-out" class="code"></span></div>
-          <div class="kv"><span class="label">剩余时间</span><span id="timer" class="value">--</span> 秒</div>
+        <div class="row">
+          <input id="remark" class="input" type="text" placeholder="账号备注（如 Google、GitHub、AWS）">
+        </div>
+        <div class="row">
+          <input id="secret" class="input" type="text" placeholder="Base32 秘钥（如 JBSWY3DPEHPK3PXP）" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        </div>
+        <div class="row">
+          <button id="btn-add"  class="btn">添加账号</button>
+          <button id="btn-once" class="btn ghost">临时查看</button>
+          <button id="btn-scan" class="btn ghost">扫码导入</button>
+          <button id="btn-pick" class="btn ghost">相册导入</button>
+          <button id="btn-export" class="btn ghost">导出</button>
+          <button id="btn-import" class="btn ghost">导入</button>
+          <input id="file-qr" type="file" accept="image/*" hidden>
+          <input id="file-json" type="file" accept="application/json,.json" hidden>
         </div>
 
-        <hr>
-
-        <div class="section">
-          <label class="muted small" for="keys-area">本地密钥记录（可备注，仅保存在浏览器本地）</label>
-          <textarea id="keys-area" class="textarea" placeholder="历史密钥与备注..."></textarea>
-          <div class="row" style="margin-top:10px">
-            <button id="btn-clear" class="btn danger">清除本地记录</button>
+        <div id="scanner" class="scanner" hidden>
+          <video id="video" autoplay playsinline muted></video>
+          <div class="row" style="margin-top:8px">
+            <button id="btn-stop" class="btn danger">停止扫码</button>
+            <span class="muted small">需要 HTTPS 与摄像头权限。如无法开启请改用「相册导入」。</span>
           </div>
-        </div>
-
-        <hr>
-
-        <h3 style="margin:0 0 10px">2FA 工具说明</h3>
-        <div class="tip">
-          <strong>演示密钥</strong>：<span id="demo-key" class="demo-key">7J64V3P3E77J3LKNUGSZ5QANTLRLTKVL</span>（点击复制）<br>
-          <strong>新手提示</strong>：必须在倒计时结束前输入验证码登录或验证，否则会失效。请输入正确编码的 Base32 密钥（A–Z 与 2–7）。点击「点击获取验证码」会自动复制结果到剪切板。<br>
-          <strong>更多方式</strong>：在网址后追加密钥参数也可直接显示，例如 <code>?key=7J64V3P3E77J3LKNUGSZ5QANTLRLTKVL</code>。<br>
-          <strong>开源地址</strong>：本站完全开源，源码托管于 GitHub，可自行部署到 Cloudflare Pages 免费运行。
         </div>
       </div>
-      <footer class="foot">© 在线工具 · 开源 MIT</footer>
+
+      <div id="list"></div>
+
+      <footer class="foot">© 在线工具 · 开源 MIT · 数据仅保存在浏览器本地</footer>
     </main>
   </div>
 
@@ -62,7 +57,7 @@
     <div class="modal-content">
       <span class="close" data-close>×</span>
       <div id="qrcode"></div>
-      <p class="qr-text">使用 Google Authenticator 或 1Password 等 App 扫描即可添加。</p>
+      <p class="qr-text">扫码即可在 Authenticator App 中添加这个账号。</p>
     </div>
   </div>
 
@@ -70,179 +65,366 @@
   <script>
   (function(){
     'use strict';
-    const PERIOD = 30, DIGITS = 6, ALGO = 'SHA1';
+    const $ = s => document.querySelector(s);
     const STORAGE = window.localStorage;
-    const $ = (sel) => document.querySelector(sel);
+    const LS_KEY = 'totp.accounts';
 
-    let serverOffsetMs = 0;
-    let secondTimer = null, windowTimer = null;
-    const nowMs = () => Date.now() + serverOffsetMs;
+    // -------- state --------
+    let accounts = [];
+    try { accounts = JSON.parse(STORAGE.getItem(LS_KEY) || '[]'); } catch(e){ accounts = []; }
+    const save = () => STORAGE.setItem(LS_KEY, JSON.stringify(accounts));
 
-    async function syncClock(){
-      try{
-        const t0 = performance.now();
-        const res = await fetch(location.href, { method: 'HEAD', cache: 'no-store' });
-        const dateStr = res.headers.get('Date');
-        if(!dateStr) return;
-        const t1 = performance.now();
-        const rtt = t1 - t0;
-        serverOffsetMs = (new Date(dateStr).getTime() + rtt/2) - Date.now();
-      } catch(e){}
-    }
+    function uid(){ return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
 
-    function tickInfo(tsMs){
-      const sec = Math.floor(tsMs / 1000);
-      const into = sec % PERIOD;
-      const left = (PERIOD - 1) - into; // matches reference behaviour
-      const nextSecondMs = (sec + 1) * 1000;
-      const nextWindowMs = (sec - into + PERIOD) * 1000;
-      return { sec, into, left, nextSecondMs, nextWindowMs };
-    }
-
-    function genTOTP(secret, tsMs){
-      const totp = new OTPAuth.TOTP({
-        algorithm: ALGO, digits: DIGITS, period: PERIOD,
-        secret: OTPAuth.Secret.fromBase32(secret)
-      });
-      return totp.generate({ timestamp: tsMs });
-    }
+    function normSecret(raw){ return String(raw || '').replace(/\s+/g, '').toUpperCase(); }
 
     function validateSecret(raw){
-      if(!raw) return null;
-      const s = String(raw).replace(/\s+/g, '').toUpperCase();
-      if(s.length < 16){ window.toast('密钥太短，请重新输入。'); return null; }
-      if(s.length > 128){ window.toast('密钥过长，请重新输入。'); return null; }
-      if(!/^[A-Z2-7]+$/.test(s)){ window.toast('非正确编码的密钥，请使用 Base32（A–Z, 2–7）。'); return null; }
+      const s = normSecret(raw);
+      if(!s) return null;
+      if(s.length < 16){ window.toast('密钥太短，至少 16 位 Base32'); return null; }
+      if(s.length > 128){ window.toast('密钥过长'); return null; }
+      if(!/^[A-Z2-7]+$/.test(s)){ window.toast('非法 Base32：只允许 A–Z 与 2–7'); return null; }
       return s;
     }
 
-    function update(secret, tsMs, opts = {}){
-      let code;
-      try{ code = genTOTP(secret, tsMs); }
-      catch(e){ window.toast('密钥解析失败：' + e.message); return null; }
-      $('#key-out').textContent = secret;
-      $('#code-out').textContent = code;
-      $('#code-out').classList.remove('warn');
-      STORAGE.setItem('lastKey', secret);
-      if(!opts.silent) window.toast('已成功获取验证码');
-      return code;
-    }
-
-    function prependRecord(secret){
-      const d = new Date();
-      const ds = `${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()}`;
-      const newLine = `${ds} - ${secret}`;
-      const ta = $('#keys-area');
-      const existing = ta.value.trim();
-      const merged = (newLine + (existing ? '\n' + existing : '')).split('\n');
-      const unique = Array.from(new Set(merged));
-      ta.value = unique.join('\n');
-      STORAGE.setItem('keysAll', ta.value);
-    }
-
-    function scheduleSecond(){
-      clearTimeout(secondTimer);
-      const { nextSecondMs } = tickInfo(nowMs());
-      secondTimer = setTimeout(onSecond, Math.max(0, nextSecondMs - nowMs()));
-    }
-    function scheduleWindow(){
-      clearTimeout(windowTimer);
-      const { nextWindowMs } = tickInfo(nowMs());
-      windowTimer = setTimeout(onWindow, Math.max(0, nextWindowMs - nowMs()));
-    }
-    function onSecond(){
-      $('#timer').textContent = tickInfo(nowMs()).left;
-      scheduleSecond();
-    }
-    function onWindow(){
-      const s = validateSecret($('#secret-input').value);
-      if(s) update(s, nowMs(), { silent: true });
-      $('#timer').textContent = PERIOD - 1;
-      scheduleWindow();
-    }
-
-    function showQR(){
-      let s = $('#secret-input').value;
-      if(!s){ return window.toast('密钥未填写'); }
-      s = validateSecret(s);
-      if(!s) return;
-      const last7 = s.slice(-7);
-      const totp = new OTPAuth.TOTP({
-        algorithm: ALGO, digits: DIGITS, period: PERIOD,
-        secret: OTPAuth.Secret.fromBase32(s),
-        label: 'Handy tool', issuer: '2fa.run|...' + last7
+    function makeTOTP(acc){
+      return new OTPAuth.TOTP({
+        issuer: acc.issuer || '',
+        label:  acc.remark || '账号',
+        algorithm: acc.algorithm || 'SHA1',
+        digits: acc.digits || 6,
+        period: acc.period || 30,
+        secret: OTPAuth.Secret.fromBase32(acc.secret)
       });
+    }
+
+    function genCode(acc, tsMs){
+      try { return makeTOTP(acc).generate({ timestamp: tsMs }); }
+      catch(e){ return '错误'; }
+    }
+
+    // -------- render --------
+    const list = $('#list');
+    function render(){
+      list.innerHTML = '';
+      if(!accounts.length){
+        const empty = document.createElement('div');
+        empty.className = 'panel ghost-panel';
+        empty.innerHTML = '<div class="muted center">暂无账号，添加或扫码导入一个试试～</div>';
+        list.appendChild(empty);
+        return;
+      }
+      for(const acc of accounts){
+        const card = document.createElement('div');
+        card.className = 'panel acc-card';
+        card.dataset.id = acc.id;
+        card.innerHTML = `
+          <div class="acc-row">
+            <div class="acc-meta">
+              <div class="acc-name" data-edit="remark" contenteditable="true" spellcheck="false"></div>
+              <div class="acc-issuer muted small"></div>
+              <div class="otp" data-otp>------</div>
+              <div class="bar-track"><div class="bar-fill" data-bar></div></div>
+            </div>
+            <div class="acc-ctrl">
+              <button class="btn ghost btn-sm" data-act="copy">复制</button>
+              <button class="btn ghost btn-sm" data-act="qr">二维码</button>
+              <button class="btn ghost btn-sm" data-act="edit">编辑秘钥</button>
+              <button class="btn ghost btn-sm" data-act="up">↑</button>
+              <button class="btn ghost btn-sm" data-act="down">↓</button>
+              <button class="btn danger btn-sm" data-act="del">删除</button>
+            </div>
+          </div>`;
+        card.querySelector('.acc-name').textContent = acc.remark || '未命名';
+        card.querySelector('.acc-issuer').textContent = acc.issuer ? '· ' + acc.issuer : '';
+        list.appendChild(card);
+      }
+      tick(true);
+    }
+
+    // -------- ticking --------
+    function tick(force){
+      const ms = Date.now();
+      const sec = Math.floor(ms / 1000);
+      for(const acc of accounts){
+        const period = acc.period || 30;
+        const left = period - (sec % period);
+        const card = list.querySelector(`[data-id="${CSS.escape(acc.id)}"]`);
+        if(!card) continue;
+        const otpEl = card.querySelector('[data-otp]');
+        const barEl = card.querySelector('[data-bar]');
+        const code = genCode(acc, ms);
+        // group spacing for 6 digits
+        const display = code.length === 6 ? code.slice(0,3) + ' ' + code.slice(3) : code;
+        otpEl.textContent = display;
+        otpEl.classList.toggle('warn', left <= 5);
+        if(barEl){
+          barEl.style.width = (left / period * 100) + '%';
+          barEl.classList.toggle('warn', left <= 5);
+        }
+      }
+    }
+    setInterval(tick, 1000);
+
+    // -------- list event delegation --------
+    list.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-act]');
+      if(!btn) return;
+      const card = e.target.closest('[data-id]');
+      const id = card.dataset.id;
+      const i = accounts.findIndex(a => a.id === id);
+      if(i < 0) return;
+      const act = btn.dataset.act;
+      if(act === 'copy'){
+        const code = genCode(accounts[i], Date.now()).replace(/\s/g,'');
+        window.copyText(code).then(ok => ok && window.toast('已复制 ' + code));
+      } else if(act === 'qr'){
+        showQR(accounts[i]);
+      } else if(act === 'edit'){
+        const v = prompt('请输入新的 Base32 秘钥：', accounts[i].secret || '');
+        if(v == null) return;
+        const s = validateSecret(v);
+        if(!s) return;
+        accounts[i].secret = s; save(); render();
+      } else if(act === 'up' && i > 0){
+        [accounts[i-1], accounts[i]] = [accounts[i], accounts[i-1]]; save(); render();
+      } else if(act === 'down' && i < accounts.length - 1){
+        [accounts[i+1], accounts[i]] = [accounts[i], accounts[i+1]]; save(); render();
+      } else if(act === 'del'){
+        if(confirm('确认删除「' + (accounts[i].remark || '该账号') + '」？')){
+          accounts.splice(i, 1); save(); render();
+        }
+      }
+    });
+
+    list.addEventListener('blur', (e) => {
+      const node = e.target.closest('[data-edit="remark"]');
+      if(!node) return;
+      const card = e.target.closest('[data-id]');
+      const i = accounts.findIndex(a => a.id === card.dataset.id);
+      if(i < 0) return;
+      const newName = (node.textContent || '').trim() || '未命名';
+      if(newName !== accounts[i].remark){
+        accounts[i].remark = newName;
+        save();
+      }
+      node.textContent = newName;
+    }, true);
+
+    list.addEventListener('keydown', (e) => {
+      if(e.target.matches('[data-edit="remark"]') && e.key === 'Enter'){
+        e.preventDefault(); e.target.blur();
+      }
+    });
+
+    // -------- add / once --------
+    function addAccount(remark, secret, extra = {}){
+      const s = validateSecret(secret);
+      if(!s) return false;
+      accounts.push({
+        id: uid(),
+        remark: (remark || '未命名').trim(),
+        issuer: extra.issuer || '',
+        secret: s,
+        algorithm: extra.algorithm || 'SHA1',
+        digits: extra.digits || 6,
+        period: extra.period || 30,
+      });
+      save(); render();
+      window.toast('已添加账号');
+      return true;
+    }
+
+    $('#btn-add').addEventListener('click', () => {
+      const r = $('#remark').value.trim();
+      const s = $('#secret').value;
+      if(!r){ return window.toast('请填写账号备注'); }
+      if(addAccount(r, s)){ $('#remark').value = ''; $('#secret').value = ''; }
+    });
+
+    $('#btn-once').addEventListener('click', () => {
+      const s = validateSecret($('#secret').value);
+      if(!s) return;
+      const code = genCode({ secret: s }, Date.now());
+      const left = 30 - (Math.floor(Date.now()/1000) % 30);
+      window.copyText(code);
+      window.toast(`一次性验证码：${code}（剩余 ${left} 秒，已复制）`);
+    });
+
+    // -------- QR display --------
+    function showQR(acc){
+      const totp = makeTOTP(acc);
       const uri = totp.toString();
       const box = $('#qrcode');
       box.innerHTML = '';
       new QRCode(box, { text: uri, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.M });
       $('#qr-modal').classList.add('open');
     }
+    document.addEventListener('click', (e) => {
+      if(e.target && e.target.matches('[data-close]')) $('#qr-modal').classList.remove('open');
+      if(e.target && e.target.id === 'qr-modal')      $('#qr-modal').classList.remove('open');
+    });
+    document.addEventListener('keydown', (e) => {
+      if(e.key === 'Escape') $('#qr-modal').classList.remove('open');
+    });
 
-    function closeModal(){ $('#qr-modal').classList.remove('open'); }
+    // -------- otpauth:// parsing --------
+    function handleOtpauthUri(data){
+      try{
+        if(!/^otpauth:\/\//i.test(data)) throw new Error('不是 otpauth 链接');
+        const u = new URL(data);
+        const type = u.host.toLowerCase(); // totp / hotp
+        if(type !== 'totp') throw new Error('暂不支持 ' + type.toUpperCase());
+        const labelRaw = decodeURIComponent(u.pathname.replace(/^\//, ''));
+        // label can be "Issuer:Account" — split
+        let issuer = u.searchParams.get('issuer') || '';
+        let remark = labelRaw;
+        if(labelRaw.includes(':')){
+          const [iss, acc] = labelRaw.split(':');
+          issuer = issuer || iss;
+          remark = acc.trim();
+        }
+        const secret = normSecret(u.searchParams.get('secret') || '');
+        if(!secret){ throw new Error('二维码中缺少 secret'); }
+        const algorithm = (u.searchParams.get('algorithm') || 'SHA1').toUpperCase();
+        const digits = parseInt(u.searchParams.get('digits') || '6', 10);
+        const period = parseInt(u.searchParams.get('period') || '30', 10);
+        return { remark: remark || issuer || '未命名', issuer, secret, algorithm, digits, period };
+      }catch(e){
+        window.toast('二维码无效：' + e.message);
+        return null;
+      }
+    }
 
-    document.addEventListener('DOMContentLoaded', async () => {
-      // restore state
-      $('#secret-input').value = STORAGE.getItem('lastKey') || '';
-      $('#keys-area').value = STORAGE.getItem('keysAll') || '';
+    // -------- gallery import --------
+    $('#btn-pick').addEventListener('click', () => $('#file-qr').click());
+    $('#file-qr').addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0]; if(!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement('canvas');
+          c.width = img.width; c.height = img.height;
+          const ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          const im = ctx.getImageData(0, 0, c.width, c.height);
+          const qr = jsQR(im.data, c.width, c.height);
+          if(!qr){ window.toast('无法识别二维码，请确认图片清晰'); return; }
+          const parsed = handleOtpauthUri(qr.data);
+          if(parsed) addAccount(parsed.remark, parsed.secret, parsed);
+        };
+        img.onerror = () => window.toast('图片加载失败');
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(f);
+      e.target.value = '';
+    });
 
-      // querystring or path-based key (mimic /2fa/<secret>)
+    // -------- camera scan --------
+    let stream = null, scanRAF = null;
+    $('#btn-scan').addEventListener('click', async () => {
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        return window.toast('当前浏览器不支持摄像头扫码，请改用相册导入');
+      }
+      $('#scanner').hidden = false;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        const v = $('#video');
+        v.srcObject = stream;
+        await v.play().catch(() => {});
+        scanLoop();
+      } catch(e){
+        window.toast('无法打开摄像头：' + (e.message || e));
+        $('#scanner').hidden = true;
+      }
+    });
+    $('#btn-stop').addEventListener('click', stopScan);
+    function stopScan(){
+      if(scanRAF){ cancelAnimationFrame(scanRAF); scanRAF = null; }
+      if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
+      $('#scanner').hidden = true;
+    }
+    function scanLoop(){
+      if(!stream) return;
+      const v = $('#video');
+      const c = document.createElement('canvas');
+      const ctx = c.getContext('2d');
+      const loop = () => {
+        if(!stream) return;
+        if(v.readyState === v.HAVE_ENOUGH_DATA && v.videoWidth){
+          c.width = v.videoWidth; c.height = v.videoHeight;
+          ctx.drawImage(v, 0, 0, c.width, c.height);
+          const im = ctx.getImageData(0, 0, c.width, c.height);
+          const qr = jsQR(im.data, c.width, c.height, { inversionAttempts: 'attemptBoth' });
+          if(qr){
+            const parsed = handleOtpauthUri(qr.data);
+            stopScan();
+            if(parsed) addAccount(parsed.remark, parsed.secret, parsed);
+            return;
+          }
+        }
+        scanRAF = requestAnimationFrame(loop);
+      };
+      scanRAF = requestAnimationFrame(loop);
+    }
+
+    // -------- export / import --------
+    $('#btn-export').addEventListener('click', () => {
+      if(!accounts.length){ return window.toast('暂无账号可导出'); }
+      const blob = new Blob([JSON.stringify(accounts, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'totp-accounts-' + new Date().toISOString().slice(0,10) + '.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    });
+    $('#btn-import').addEventListener('click', () => $('#file-json').click());
+    $('#file-json').addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0]; if(!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result);
+          if(!Array.isArray(data)) throw new Error('文件格式不正确');
+          let n = 0;
+          for(const a of data){
+            const s = normSecret(a.secret);
+            if(!s || !/^[A-Z2-7]+$/.test(s)) continue;
+            accounts.push({
+              id: uid(),
+              remark: a.remark || a.label || '未命名',
+              issuer: a.issuer || '',
+              secret: s,
+              algorithm: (a.algorithm || 'SHA1').toUpperCase(),
+              digits: parseInt(a.digits || 6, 10),
+              period: parseInt(a.period || 30, 10),
+            });
+            n++;
+          }
+          save(); render();
+          window.toast('已导入 ' + n + ' 个账号');
+        } catch(err){
+          window.toast('导入失败：' + err.message);
+        }
+      };
+      reader.readAsText(f);
+      e.target.value = '';
+    });
+
+    // -------- URL params support: ?key=… or /2fa/<KEY> --------
+    (function bootstrapFromUrl(){
       const url = new URL(location.href);
       let auto = url.searchParams.get('key');
       const m = url.pathname.match(/\/2fa\/([A-Za-z2-7]+)\/?$/);
       if(!auto && m) auto = m[1];
       if(auto){
-        const v = validateSecret(auto);
-        if(v){ $('#secret-input').value = v; update(v, nowMs(), { silent: true }); prependRecord(v); }
+        const s = validateSecret(auto);
+        if(s) $('#secret').value = s;
       }
+    })();
 
-      await syncClock();
-      $('#timer').textContent = tickInfo(nowMs()).left;
-      scheduleSecond();
-      scheduleWindow();
-
-      // re-render existing key
-      const existing = $('#secret-input').value;
-      if(existing){
-        const v = validateSecret(existing);
-        if(v) update(v, nowMs(), { silent: true });
-      }
-    });
-
-    $('#btn-get').addEventListener('click', () => {
-      const s = validateSecret($('#secret-input').value);
-      if(!s) return;
-      const code = update(s, nowMs());
-      prependRecord(s);
-      if(code) window.copyText(code);
-    });
-    $('#btn-qr').addEventListener('click', showQR);
-    $('#btn-clear').addEventListener('click', () => {
-      $('#keys-area').value = '';
-      STORAGE.setItem('keysAll', '');
-      window.toast('已清除本地记录');
-    });
-    document.addEventListener('input', (e) => {
-      if(e.target && e.target.id === 'keys-area'){
-        STORAGE.setItem('keysAll', e.target.value);
-      }
-    });
-    document.addEventListener('click', (e) => {
-      if(e.target && e.target.matches('[data-close]')) closeModal();
-      if(e.target && e.target.id === 'qr-modal') closeModal();
-    });
-    document.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeModal(); });
-    document.getElementById('demo-key').addEventListener('click', () => {
-      const k = document.getElementById('demo-key').textContent.trim();
-      window.copyText(k);
-      window.toast('已复制测试密钥');
-    });
-    document.addEventListener('visibilitychange', async () => {
-      if(document.visibilityState === 'visible'){
-        await syncClock();
-        scheduleSecond(); scheduleWindow();
-      }
-    });
+    render();
   })();
   </script>
 </body>

@@ -1,24 +1,24 @@
 # totp-tools
 
-开源的 2FA / TOTP 在线生成工具集，参考 [2fa.run](https://2fa.run) 的页面布局重写为纯静态站点，可以零成本部署在 **Cloudflare Pages** 上。
+开源的 2FA / TOTP 在线工具集，零成本部署到 **Cloudflare Pages**。
 
 ## ✨ 功能
 
-- **2FA 验证码** — 输入 Base32 密钥实时生成 6 位 TOTP，支持二维码、URL 直传密钥（`/2fa/<KEY>` 或 `?key=<KEY>`）
+- **2FA 多账号管理器** — 本地保存多组账号，每 30 秒自动刷新；支持手动添加 Base32 密钥、扫码导入、相册图片识别、JSON 导入/导出、备注随时编辑、卡片重排序、二维码反向输出
 - **文本处理** — 去重、排序、大小写转换、字数统计、Base64 / URL 编解码、JSON 美化
 - **图片处理** — 拖拽 / 粘贴上传，缩放、压缩、转换 JPG / PNG / WEBP，转 Base64
-- **汇率换算** — 实时汇率（数据来自 [Frankfurter / ECB](https://www.frankfurter.app/) 公开 API，免 Key）
+- **汇率换算** — 实时汇率（数据来自 [Frankfurter / ECB](https://frankfurter.dev) 公开 API，免 Key）
 - **更多工具** — UUID v4、安全密码生成、时间戳互转、SHA 系列哈希、二维码生成
 
 ## 🔒 隐私
 
-所有功能 **完全在浏览器本地运行**，不向服务端上传任何密钥、文本或图片。汇率页会请求 frankfurter.app 获取最新汇率（仅币种与基准代码，无任何用户数据）。
+所有功能 **完全在浏览器本地运行**，密钥、图片、文本均不向服务端上传。汇率页会请求 frankfurter.dev 拉取最新汇率（仅币种代码，无任何用户数据）。
 
 ## 🗂️ 目录
 
 ```
 public/
-├── index.html       # 2FA 主页
+├── index.html       # 2FA 多账号管理器
 ├── note.html        # 文本处理
 ├── work.html        # 图片处理
 ├── money.html       # 汇率换算
@@ -30,7 +30,8 @@ public/
     └── js/
         ├── common.js
         ├── otpauth.umd.min.js   # MIT, hectorm/otpauth 9.3.4
-        └── qrcode.min.js        # MIT, davidshimjs/qrcodejs
+        ├── qrcode.min.js        # MIT, davidshimjs/qrcodejs
+        └── jsQR.js              # Apache-2.0, cozmo/jsQR
 ```
 
 无构建步骤；任意静态托管都能跑。
@@ -75,7 +76,4 @@ cd public && python3 -m http.server 8080
 
 - [otpauth](https://github.com/hectorm/otpauth) by Héctor Molinero Fernández — MIT
 - [QRCode.js](https://github.com/davidshimjs/qrcodejs) by Sangmin Shim — MIT
-
-## 🙏 致谢
-
-UI 与功能选型参考 [2fa.run](https://2fa.run)，本仓库与该站点无任何隶属关系。
+- [jsQR](https://github.com/cozmo/jsQR) by Daniel Cohen Gindi — Apache 2.0
