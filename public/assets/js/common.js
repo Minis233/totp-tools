@@ -1,4 +1,4 @@
-/* common.js — shared sidebar, notification, modal, and helpers */
+/* common.js — shared sidebar, notification, modal, helpers, and SPA router */
 (function(){
   'use strict';
 
@@ -9,31 +9,32 @@
     { href: 'money.html',  label: '汇率换算',  ico: '↔'  },
     { href: 'more.html',   label: '更多工具',  ico: '⋯'  },
   ];
+  const PAGE_SET = new Set(NAV.map(n => n.href));
+
+  function currentPage(){
+    const p = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
+    return p === '' ? 'index.html' : p;
+  }
 
   function renderSidebar(){
     const container = document.querySelector('[data-sidebar]');
     if(!container) return;
-    const here = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
-    const active = here === '' ? 'index.html' : here;
+    const active = currentPage();
     container.innerHTML = `
       <div class="brand"><span class="brand-dot"></span><span>在线工具</span></div>
       <nav>
         ${NAV.map(n => {
           const isActive = n.href === active;
-          return `<a class="${isActive?'active':''}" href="${n.href}"><span class="ico" aria-hidden="true">${n.ico}</span>${n.label}</a>`;
+          return `<a class="${isActive?'active':''}" href="${n.href}" data-spa><span class="ico" aria-hidden="true">${n.ico}</span>${n.label}</a>`;
         }).join('')}
       </nav>
     `;
   }
 
-  // Notification system
+  // ---------- Notification ----------
   function ensureContainer(){
     let c = document.getElementById('notification-container');
-    if(!c){
-      c = document.createElement('div');
-      c.id = 'notification-container';
-      document.body.appendChild(c);
-    }
+    if(!c){ c = document.createElement('div'); c.id = 'notification-container'; document.body.appendChild(c); }
     return c;
   }
   let lastAt = 0;
@@ -48,32 +49,151 @@
     c.appendChild(n);
     void n.offsetWidth;
     n.classList.add('show');
-    setTimeout(() => {
-      n.classList.remove('show');
-      setTimeout(() => n.remove(), 400);
-    }, 2400);
+    setTimeout(() => { n.classList.remove('show'); setTimeout(() => n.remove(), 400); }, 2400);
   };
 
-  // Clipboard helper
   window.copyText = async function(str){
     try{
       if(navigator.clipboard && window.isSecureContext){
         await navigator.clipboard.writeText(str);
       } else {
         const ta = document.createElement('textarea');
-        ta.value = str;
-        ta.style.position = 'fixed'; ta.style.opacity = '0';
+        ta.value = str; ta.style.position = 'fixed'; ta.style.opacity = '0';
         document.body.appendChild(ta); ta.select();
         const ok = document.execCommand('copy');
         document.body.removeChild(ta);
         if(!ok) throw new Error('execCommand failed');
       }
       return true;
-    } catch(e){
-      window.toast('无法自动复制，请手动操作！');
-      return false;
-    }
+    } catch(e){ window.toast('无法自动复制，请手动操作！'); return false; }
   };
 
-  document.addEventListener('DOMContentLoaded', renderSidebar);
+  // ---------- Page-scoped timer / listener tracking ----------
+  // Patches setInterval so each page's intervals are auto-cleared on SPA navigation.
+  // Same for window/document listeners registered via __pageOn.
+  const tracked = {
+    intervals: new Set(),
+    timeouts: new Set(),
+    listeners: [], // { target, type, fn, opts }
+  };
+  const _si = window.setInterval, _ci = window.clearInterval;
+  const _st = window.setTimeout,  _ct = window.clearTimeout;
+  window.setInterval = function(){
+    const id = _si.apply(this, arguments);
+    tracked.intervals.add(id);
+    return id;
+  };
+  window.clearInterval = function(id){ tracked.intervals.delete(id); return _ci.call(this, id); };
+  // Pages may register persistent (document/window) listeners via __pageOn so they
+  // get cleaned up on navigation.
+  window.__pageOn = function(target, type, fn, opts){
+    target.addEventListener(type, fn, opts);
+    tracked.listeners.push({ target, type, fn, opts });
+  };
+  function cleanupPageState(){
+    for(const id of tracked.intervals) _ci.call(window, id);
+    tracked.intervals.clear();
+    for(const { target, type, fn, opts } of tracked.listeners){
+      try { target.removeEventListener(type, fn, opts); } catch(_){}
+    }
+    tracked.listeners.length = 0;
+  }
+
+  // ---------- SPA router ----------
+  const pageCache = new Map();
+  let inflight = null;
+  let loadedHref = null; // page currently rendered into <main>
+
+  async function fetchPage(href){
+    if(pageCache.has(href)) return pageCache.get(href);
+    const resp = await fetch(href, { credentials: 'same-origin' });
+    if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    const html = await resp.text();
+    pageCache.set(href, html);
+    return html;
+  }
+
+  // Re-execute scripts inside the freshly-injected DOM subtree.
+  // <script src> for libraries we already loaded in the shell are skipped.
+  // Inline <script> blocks are re-created so they actually run.
+  function runScripts(root){
+    const scripts = Array.from(root.querySelectorAll('script'));
+    for(const old of scripts){
+      const src = old.getAttribute('src');
+      if(src){
+        if(/(otpauth|qrcode|jsQR|common\.js)/i.test(src)) { old.remove(); continue; }
+        const s = document.createElement('script');
+        for(const a of old.attributes) s.setAttribute(a.name, a.value);
+        old.parentNode.replaceChild(s, old);
+      } else {
+        const s = document.createElement('script');
+        s.textContent = old.textContent;
+        old.parentNode.replaceChild(s, old);
+      }
+    }
+  }
+
+  function extractFromHtml(html){
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const main = doc.querySelector('main');
+    const title = (doc.querySelector('title') || {}).textContent || document.title;
+    return { main, title };
+  }
+
+  async function navigateTo(href, push){
+    if(!PAGE_SET.has(href)) return false;
+    if(href === loadedHref && !inflight) return true;
+
+    const myToken = inflight = Symbol('nav');
+
+    let html;
+    try { html = await fetchPage(href); }
+    catch(e){ window.toast('加载失败：' + e.message); return false; }
+    if(inflight !== myToken) return false;
+
+    const { main, title } = extractFromHtml(html);
+    if(!main){ window.toast('页面解析失败'); return false; }
+
+    cleanupPageState();
+
+    const oldMain = document.querySelector('main');
+    const newMain = main.cloneNode(true);
+    oldMain.replaceWith(newMain);
+    document.title = title;
+
+    if(push) history.pushState({ spa: true, href }, title, href);
+
+    document.querySelectorAll('.sidebar nav a').forEach(a => a.classList.remove('active'));
+    const link = document.querySelector('.sidebar nav a[href="' + href + '"]');
+    if(link) link.classList.add('active');
+
+    runScripts(newMain);
+
+    window.scrollTo({ top: 0 });
+    loadedHref = href;
+    inflight = null;
+    return true;
+  }
+
+  function bindRouter(){
+    document.addEventListener('click', (e) => {
+      const a = e.target.closest('a[data-spa]');
+      if(!a) return;
+      if(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      const href = a.getAttribute('href');
+      if(!href || !PAGE_SET.has(href)) return;
+      e.preventDefault();
+      navigateTo(href, true);
+    });
+    window.addEventListener('popstate', () => {
+      const href = currentPage();
+      if(PAGE_SET.has(href)) navigateTo(href, false);
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    loadedHref = currentPage();
+    renderSidebar();
+    bindRouter();
+  });
 })();

@@ -7,6 +7,9 @@
   <meta name="description" content="文本处理工具：去重、排序、大小写转换、字数统计、Base64 / URL 编解码、JSON 格式化。">
   <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
   <link rel="stylesheet" href="assets/css/style.css">
+  <script src="assets/js/otpauth.umd.min.js"></script>
+  <script src="assets/js/qrcode.min.js"></script>
+  <script src="assets/js/jsQR.js"></script>
 </head>
 <body>
   <div class="layout">
@@ -59,12 +62,8 @@
         </div>
       </div>
       <footer class="foot">© 在线工具 · 开源 MIT</footer>
-    </main>
-  </div>
-
-  <script src="assets/js/common.js"></script>
-  <script>
-  (function(){
+      <script>
+      (function(){
     'use strict';
     const $ = (s) => document.querySelector(s);
     const inEl = $('#in'), outEl = $('#out');
@@ -150,5 +149,9 @@
     updateCounter();
   })();
   </script>
+    </main>
+  </div>
+
+  <script src="assets/js/common.js"></script>
 </body>
 </html>

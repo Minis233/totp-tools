@@ -7,6 +7,9 @@
   <meta name="description" content="纯前端图片处理：压缩、缩放、格式转换（JPG / PNG / WEBP）、Base64。">
   <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
   <link rel="stylesheet" href="assets/css/style.css">
+  <script src="assets/js/otpauth.umd.min.js"></script>
+  <script src="assets/js/qrcode.min.js"></script>
+  <script src="assets/js/jsQR.js"></script>
 </head>
 <body>
   <div class="layout">
@@ -51,10 +54,7 @@
         </div>
       </div>
       <footer class="foot">© 在线工具 · 开源 MIT</footer>
-    </main>
-  </div>
-
-  <script src="assets/js/common.js"></script>
+    
   <script>
   (function(){
     'use strict';
@@ -121,7 +121,7 @@
       drop.addEventListener('drop', e => {
         const f = e.dataTransfer.files && e.dataTransfer.files[0]; if(f) load(f);
       });
-      window.addEventListener('paste', e => {
+      (window.__pageOn || ((t,e,f)=>t.addEventListener(e,f)))(window, 'paste', e => {
         const items = e.clipboardData && e.clipboardData.items || [];
         for(const it of items){
           if(it.kind === 'file'){
@@ -149,5 +149,9 @@
     });
   })();
   </script>
+    </main>
+  </div>
+
+  <script src="assets/js/common.js"></script>
 </body>
 </html>

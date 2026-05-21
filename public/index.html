@@ -50,18 +50,7 @@
       <div id="list"></div>
 
       <footer class="foot">© 在线工具 · 开源 MIT · 数据仅保存在浏览器本地</footer>
-    </main>
-  </div>
-
-  <div id="qr-modal" class="modal" role="dialog" aria-modal="true">
-    <div class="modal-content">
-      <span class="close" data-close>×</span>
-      <div id="qrcode"></div>
-      <p class="qr-text">扫码即可在 Authenticator App 中添加这个账号。</p>
-    </div>
-  </div>
-
-  <script src="assets/js/common.js"></script>
+    
   <script>
   (function(){
     'use strict';
@@ -260,11 +249,11 @@
       new QRCode(box, { text: uri, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.M });
       $('#qr-modal').classList.add('open');
     }
-    document.addEventListener('click', (e) => {
+    (window.__pageOn || document.addEventListener.bind(document))(document, 'click', (e) => {
       if(e.target && e.target.matches('[data-close]')) $('#qr-modal').classList.remove('open');
       if(e.target && e.target.id === 'qr-modal')      $('#qr-modal').classList.remove('open');
     });
-    document.addEventListener('keydown', (e) => {
+    (window.__pageOn || document.addEventListener.bind(document))(document, 'keydown', (e) => {
       if(e.key === 'Escape') $('#qr-modal').classList.remove('open');
     });
 
@@ -427,5 +416,17 @@
     render();
   })();
   </script>
+    </main>
+  </div>
+
+  <div id="qr-modal" class="modal" role="dialog" aria-modal="true">
+    <div class="modal-content">
+      <span class="close" data-close>×</span>
+      <div id="qrcode"></div>
+      <p class="qr-text">扫码即可在 Authenticator App 中添加这个账号。</p>
+    </div>
+  </div>
+
+  <script src="assets/js/common.js"></script>
 </body>
 </html>
