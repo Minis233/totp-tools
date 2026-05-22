@@ -11,12 +11,13 @@
   <script src="assets/js/otpauth.umd.min.js"></script>
   <script src="assets/js/qrcode.min.js"></script>
   <script src="assets/js/jsQR.js"></script>
+  <script src="assets/js/common.js"></script>
 </head>
 <body>
   <div class="layout">
     <aside class="sidebar" data-sidebar></aside>
     <main>
-      <div class="panel">
+      <div class="panel hero">
         <h1>🔐 2FA 多账号管理器</h1>
         <p class="lead">本地保存多组 TOTP 密钥，自动按 30 秒周期刷新。所有数据只存在浏览器本地，不上传服务端。</p>
         <hr>
@@ -30,10 +31,10 @@
         <div class="row">
           <button id="btn-add"  class="btn">添加账号</button>
           <button id="btn-once" class="btn ghost">临时查看</button>
-          <button id="btn-scan" class="btn ghost">扫码导入</button>
-          <button id="btn-pick" class="btn ghost">相册导入</button>
-          <button id="btn-export" class="btn ghost">导出</button>
-          <button id="btn-import" class="btn ghost">导入</button>
+          <button id="btn-scan" class="btn subtle">扫码导入</button>
+          <button id="btn-pick" class="btn subtle">相册导入</button>
+          <button id="btn-export" class="btn subtle">导出</button>
+          <button id="btn-import" class="btn subtle">导入</button>
           <input id="file-qr" type="file" accept="image/*" hidden>
           <input id="file-json" type="file" accept="application/json,.json" hidden>
         </div>
@@ -45,6 +46,10 @@
             <span class="muted small">需要 HTTPS 与摄像头权限。如无法开启请改用「相册导入」。</span>
           </div>
         </div>
+      </div>
+
+      <div class="toolbar">
+        <input id="search" class="input search-input" type="search" placeholder="🔍 搜索账号备注或 issuer..." autocomplete="off">
       </div>
 
       <div id="list"></div>
@@ -94,16 +99,42 @@
 
     // -------- render --------
     const list = $('#list');
+    let searchQuery = '';
+    const RING_R = 20, RING_C = 2 * Math.PI * RING_R;
+
+    function filteredAccounts(){
+      if(!searchQuery) return accounts;
+      const q = searchQuery.toLowerCase();
+      return accounts.filter(a =>
+        (a.remark || '').toLowerCase().includes(q) ||
+        (a.issuer || '').toLowerCase().includes(q)
+      );
+    }
+
     function render(){
       list.innerHTML = '';
+      const visible = filteredAccounts();
       if(!accounts.length){
-        const empty = document.createElement('div');
-        empty.className = 'panel ghost-panel';
-        empty.innerHTML = '<div class="muted center">暂无账号，添加或扫码导入一个试试～</div>';
-        list.appendChild(empty);
+        list.innerHTML = `
+          <div class="panel">
+            <div class="empty-state">
+              <div class="ico">🔐</div>
+              <div>暂无账号，添加或扫码导入一个试试～</div>
+            </div>
+          </div>`;
         return;
       }
-      for(const acc of accounts){
+      if(!visible.length){
+        list.innerHTML = `
+          <div class="panel">
+            <div class="empty-state">
+              <div class="ico">🔍</div>
+              <div>没有匹配「${searchQuery}」的账号</div>
+            </div>
+          </div>`;
+        return;
+      }
+      for(const acc of visible){
         const card = document.createElement('div');
         card.className = 'panel acc-card';
         card.dataset.id = acc.id;
@@ -112,16 +143,25 @@
             <div class="acc-meta">
               <div class="acc-name" data-edit="remark" contenteditable="true" spellcheck="false"></div>
               <div class="acc-issuer muted small"></div>
-              <div class="otp" data-otp>------</div>
-              <div class="bar-track"><div class="bar-fill" data-bar></div></div>
+              <div class="otp-block">
+                <div class="otp" data-otp data-act="copy" title="点击复制">------</div>
+                <div class="ring">
+                  <svg viewBox="0 0 48 48" aria-hidden="true">
+                    <circle class="ring-bg" cx="24" cy="24" r="${RING_R}"/>
+                    <circle class="ring-fg" data-ring cx="24" cy="24" r="${RING_R}"
+                      stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="0"/>
+                  </svg>
+                  <div class="ring-text" data-ring-text>--</div>
+                </div>
+              </div>
             </div>
             <div class="acc-ctrl">
-              <button class="btn ghost btn-sm" data-act="copy">复制</button>
-              <button class="btn ghost btn-sm" data-act="qr">二维码</button>
-              <button class="btn ghost btn-sm" data-act="edit">编辑秘钥</button>
-              <button class="btn ghost btn-sm" data-act="up">↑</button>
-              <button class="btn ghost btn-sm" data-act="down">↓</button>
-              <button class="btn danger btn-sm" data-act="del">删除</button>
+              <button class="btn ghost btn-sm" data-act="copy" title="复制验证码">📋</button>
+              <button class="btn ghost btn-sm" data-act="qr" title="生成二维码">▦</button>
+              <button class="btn ghost btn-sm" data-act="edit" title="编辑密钥">✎</button>
+              <button class="btn ghost btn-sm" data-act="up" title="上移">↑</button>
+              <button class="btn ghost btn-sm" data-act="down" title="下移">↓</button>
+              <button class="btn danger btn-sm" data-act="del" title="删除">🗑</button>
             </div>
           </div>`;
         card.querySelector('.acc-name').textContent = acc.remark || '未命名';
@@ -141,15 +181,24 @@
         const card = list.querySelector(`[data-id="${CSS.escape(acc.id)}"]`);
         if(!card) continue;
         const otpEl = card.querySelector('[data-otp]');
-        const barEl = card.querySelector('[data-bar]');
+        const ring = card.querySelector('[data-ring]');
+        const ringText = card.querySelector('[data-ring-text]');
+
         const code = genCode(acc, ms);
-        // group spacing for 6 digits
         const display = code.length === 6 ? code.slice(0,3) + ' ' + code.slice(3) : code;
         otpEl.textContent = display;
-        otpEl.classList.toggle('warn', left <= 5);
-        if(barEl){
-          barEl.style.width = (left / period * 100) + '%';
-          barEl.classList.toggle('warn', left <= 5);
+
+        const warn = left <= 5;
+        otpEl.classList.toggle('warn', warn);
+
+        if(ring){
+          const offset = (1 - left / period) * RING_C;
+          ring.style.strokeDashoffset = offset.toFixed(2);
+          ring.classList.toggle('warn', warn);
+        }
+        if(ringText){
+          ringText.textContent = left;
+          ringText.classList.toggle('warn', warn);
         }
       }
     }
@@ -157,9 +206,10 @@
 
     // -------- list event delegation --------
     list.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-act]');
+      const btn = e.target.closest('[data-act]');
       if(!btn) return;
       const card = e.target.closest('[data-id]');
+      if(!card) return;
       const id = card.dataset.id;
       const i = accounts.findIndex(a => a.id === id);
       if(i < 0) return;
@@ -401,6 +451,15 @@
       e.target.value = '';
     });
 
+    // -------- search ----------
+    const searchInput = $('#search');
+    if(searchInput){
+      searchInput.addEventListener('input', (e) => {
+        searchQuery = e.target.value.trim();
+        render();
+      });
+    }
+
     // -------- URL params support: ?key=… or /2fa/<KEY> --------
     (function bootstrapFromUrl(){
       const url = new URL(location.href);
@@ -427,6 +486,5 @@
     </div>
   </div>
 
-  <script src="assets/js/common.js"></script>
 </body>
 </html>

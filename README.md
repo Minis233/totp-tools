@@ -6,11 +6,12 @@ Live demo: https://totp-tools.pages.dev
 
 ## ✨ Features
 
-- **2FA multi-account manager** — store as many accounts as you need locally; automatic 30-second refresh; add by Base32 secret, scan a QR code, or import from a saved image; rename inline; reorder, copy, regenerate QR; JSON import / export for backup
-- **Text utilities** — dedupe, sort, case conversion, character / word / byte counts, Base64 and URL encode/decode, JSON pretty-print and minify, line numbering
+- **2FA multi-account manager** — store as many accounts as you need locally; automatic 30-second refresh with per-account circular countdown ring; add by Base32 secret, scan a QR code, or import from a saved image; rename inline; reorder, copy, regenerate QR; live search; JSON import / export for backup
+- **Text utilities** — dedupe, sort, case conversion, character / word / byte counts, Base64 / URL / Hex encode-decode, JSON pretty-print and minify, regex find-and-replace, line numbering, character frequency analysis
 - **Image utilities** — drag-drop / paste / pick a file, resize, compress, convert between JPG / PNG / WEBP, copy as Base64
 - **Currency converter** — live FX rates from [Frankfurter / ECB](https://frankfurter.dev), no API key required
-- **More tools** — UUID v4, secure password generator, timestamp converter, SHA-1/256/384/512 hashing, QR code generator
+- **More tools** — UUID v4, secure password generator, timestamp converter, SHA-1/256/384/512 hashing, QR code generator, **JWT decoder**, **color converter** (HEX / RGB / HSL / HSV with picker), **number-base converter** (2 / 8 / 10 / 16 plus arbitrary 2-36)
+- **Light / dark / auto theme** — toggle in the sidebar, preference is remembered locally
 - **In-app navigation** — switching between tools never reloads the page; the sidebar acts as a SPA router so timers, focus state, and library globals are preserved
 
 ## 🔒 Privacy

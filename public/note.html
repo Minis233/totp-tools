@@ -10,13 +10,14 @@
   <script src="assets/js/otpauth.umd.min.js"></script>
   <script src="assets/js/qrcode.min.js"></script>
   <script src="assets/js/jsQR.js"></script>
+  <script src="assets/js/common.js"></script>
 </head>
 <body>
   <div class="layout">
     <aside class="sidebar" data-sidebar></aside>
     <main>
-      <div class="panel">
-        <h1>文本处理</h1>
+      <div class="panel hero">
+        <h1>📝 文本处理</h1>
         <p class="lead">常用纯前端文本处理：去重 / 排序 / 大小写 / 字数 / 编解码 / JSON 格式化。</p>
         <hr>
 
@@ -56,9 +57,26 @@
           <button class="btn btn-sm" data-op="b64dec">Base64 解码</button>
           <button class="btn btn-sm" data-op="urlenc">URL 编码</button>
           <button class="btn btn-sm" data-op="urldec">URL 解码</button>
+          <button class="btn btn-sm" data-op="hexenc">Hex 编码</button>
+          <button class="btn btn-sm" data-op="hexdec">Hex 解码</button>
           <button class="btn btn-sm" data-op="jsonFormat">JSON 美化</button>
           <button class="btn btn-sm" data-op="jsonMin">JSON 压缩</button>
           <button class="btn btn-sm" data-op="lineNum">添加行号</button>
+          <button class="btn btn-sm" data-op="reverseStr">反转字符</button>
+          <button class="btn btn-sm" data-op="charCount">字符统计</button>
+        </div>
+
+        <hr>
+        <h3 style="margin:0 0 10px;font-size:14px;font-weight:700;color:var(--text-strong)">正则查找替换</h3>
+        <div class="grid-2" style="margin-bottom:10px">
+          <div class="col">
+            <input id="rx-pat" class="input code-input" placeholder="正则表达式（如 \\d+）">
+            <input id="rx-flags" class="input code-input" placeholder="flags（默认 g）" value="g">
+          </div>
+          <div class="col">
+            <input id="rx-rep" class="input code-input" placeholder="替换为（支持 $1 $2 ...）">
+            <button id="rx-run" class="btn">应用替换</button>
+          </div>
         </div>
       </div>
       <footer class="foot">© 在线工具 · 开源 MIT</footer>
@@ -108,6 +126,30 @@
         const w = String(lines.length).length;
         return lines.map((l, i) => String(i+1).padStart(w, ' ') + '  ' + l).join('\n');
       },
+      reverseStr: t => [...t].reverse().join(''),
+      hexenc: t => {
+        const bytes = new TextEncoder().encode(t);
+        return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join(' ');
+      },
+      hexdec: t => {
+        try {
+          const cleaned = t.replace(/0x/gi, '').replace(/[^0-9a-fA-F]/g, '');
+          if(cleaned.length % 2 !== 0) throw new Error('hex 长度必须为偶数');
+          const bytes = new Uint8Array(cleaned.length / 2);
+          for(let i = 0; i < cleaned.length; i += 2){
+            bytes[i/2] = parseInt(cleaned.substr(i, 2), 16);
+          }
+          return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+        } catch(e){ throw new Error('Hex 解码失败：' + e.message); }
+      },
+      charCount: t => {
+        const map = new Map();
+        for(const ch of t){ map.set(ch, (map.get(ch) || 0) + 1); }
+        return Array.from(map.entries())
+          .sort((a, b) => b[1] - a[1])
+          .map(([c, n]) => `${JSON.stringify(c)} → ${n}`)
+          .join('\n');
+      },
     };
 
     function updateCounter(){
@@ -146,12 +188,28 @@
       updateCounter();
     });
 
+    // -------- regex find/replace --------
+    const rxRun = $('#rx-run');
+    if(rxRun){
+      rxRun.addEventListener('click', () => {
+        const pat = $('#rx-pat').value;
+        const flags = $('#rx-flags').value || 'g';
+        const rep = $('#rx-rep').value;
+        if(!pat){ window.toast('请输入正则表达式'); return; }
+        try {
+          const re = new RegExp(pat, flags);
+          outEl.value = inEl.value.replace(re, rep);
+          window.toast('已替换');
+        } catch(e){
+          window.toast('正则错误：' + e.message);
+        }
+      });
+    }
+
     updateCounter();
   })();
   </script>
     </main>
   </div>
-
-  <script src="assets/js/common.js"></script>
 </body>
 </html>
