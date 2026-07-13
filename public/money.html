@@ -3,142 +3,718 @@
 <head>
   <meta charset="utf-8">
   <title>汇率换算</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="实时汇率换算，数据来自开源免费汇率 API。">
-  <link rel="icon" type="image/svg+xml" href="/assets/img/favicon.svg">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/css/style.css">
   <link rel="stylesheet" href="/assets/css/ui-v4.css">
-  <script src="/assets/js/otpauth.umd.min.js"></script>
-  <script src="/assets/js/qrcode.min.js"></script>
-  <script src="/assets/js/jsQR.js"></script>
+  <link rel="stylesheet" href="/assets/css/money-v4.css">
   <script src="/assets/js/common.js"></script>
 </head>
 <body>
   <div class="layout">
     <aside class="sidebar" data-sidebar></aside>
     <main>
-      <div class="panel hero">
-        <h1>💱 汇率换算</h1>
-        <p class="lead">数据来自 <a href="https://frankfurter.dev/" target="_blank" rel="noopener">Frankfurter</a>（欧洲央行 ECB 公开数据），免费、无需 API Key。</p>
-        <hr>
-
-        <div class="grid-2">
-          <div class="col">
-            <label class="muted small">从</label>
-            <div class="swap-row">
-              <input id="amtFrom" class="input" type="number" value="100" step="any">
-              <select id="curFrom"></select>
-            </div>
-          </div>
-          <div class="col">
-            <label class="muted small">到</label>
-            <div class="swap-row">
-              <input id="amtTo" class="input" type="number" step="any">
-              <select id="curTo"></select>
-            </div>
-          </div>
-        </div>
-
-        <div class="row" style="margin-top:14px">
-          <button id="swap" class="btn ghost">⇄ 互换</button>
-          <button id="refresh" class="btn">刷新汇率</button>
-          <span id="status" class="muted small"></span>
-        </div>
-
-        <hr>
-
-        <h3 style="margin:0 0 8px">基准 1 单位（<span id="baseLabel">USD</span>）兑常用货币</h3>
-        <table class="rates" id="rates-table">
-          <thead><tr><th>币种</th><th>代码</th><th>汇率</th></tr></thead>
-          <tbody></tbody>
-        </table>
-
-        <p class="small muted" style="margin-top:14px">汇率仅供参考，实际成交以银行 / 交易所为准。</p>
+      <div class="tabs money-subnav" id="moneySubnav" role="tablist">
+        <button type="button" class="tab active" data-money-view="fx">汇率换算</button>
+        <button type="button" class="tab" data-money-view="fee">卡外币损耗</button>
       </div>
-      <footer class="foot">© 在线工具 · 开源 MIT</footer>
-    
-  <script>
+
+      <div id="view-fx">
+      <div class="panel hero">
+        <div class="page-head">
+          <h1>💱 汇率换算</h1>
+          <p class="lead">支持全球 160+ 法币。可切换 ECB / 全球综合 / Wise 中间价，并支持实时刷新。</p>
+        </div>
+        <div class="panel-body">
+          <div class="tabs" id="providerTabs">
+            <button class="tab" data-provider="frankfurter" type="button"><span class="tab-full">Frankfurter · ECB</span><span class="tab-short">ECB</span></button>
+            <button class="tab active" data-provider="open" type="button"><span class="tab-full">全球 · open.er-api</span><span class="tab-short">全球</span></button>
+            <button class="tab" data-provider="wise" type="button"><span class="tab-full">Wise · mid-market</span><span class="tab-short">Wise</span></button>
+          </div>
+          <p id="providerHint" class="muted small fx-hint"></p>
+
+          <div class="fx-pair">
+            <div class="fx-field">
+              <label class="muted small">从</label>
+              <div id="comboFrom" class="ccy-combo" data-side="from"></div>
+              <input id="amtFrom" class="input" type="number" inputmode="decimal" value="100" step="any" aria-label="源金额">
+            </div>
+            <div class="fx-field">
+              <label class="muted small">到</label>
+              <div id="comboTo" class="ccy-combo" data-side="to"></div>
+              <input id="amtTo" class="input" type="number" inputmode="decimal" step="any" aria-label="目标金额">
+            </div>
+          </div>
+
+          <div class="fx-toolbar">
+            <div class="fx-actions">
+              <button id="swap" class="btn ghost" type="button">⇄ 互换</button>
+              <button id="refresh" class="btn" type="button">刷新汇率</button>
+            </div>
+            <div class="live-chip" id="liveChip" data-on="false">
+              <label class="switch" title="开启后按间隔自动拉取最新汇率">
+                <input id="autoRefresh" type="checkbox" role="switch" aria-checked="false">
+                <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+              </label>
+              <div class="live-meta">
+                <div class="live-title">
+                  <span class="live-dot" aria-hidden="true"></span>
+                  <span>实时刷新</span>
+                </div>
+                <span id="countdown" class="live-countdown" data-state="off">已关闭</span>
+              </div>
+              <select id="autoInterval" class="live-interval" aria-label="刷新间隔">
+                <option value="10">10 秒</option>
+                <option value="15">15 秒</option>
+                <option value="30" selected>30 秒</option>
+                <option value="60">1 分钟</option>
+                <option value="120">2 分钟</option>
+                <option value="300">5 分钟</option>
+              </select>
+            </div>
+          </div>
+          <p id="status" class="muted small fx-status"></p>
+        </div>
+      </div>
+
+      <div class="panel fx-rates-panel">
+        <div class="fx-rates-head">
+          <h3 style="margin:0">全部汇率 <span class="muted small">基准 <span id="baseLabel">USD</span></span></h3>
+          <input id="rateSearch" class="input" type="search" placeholder="筛选币种 / 名称" autocomplete="off">
+        </div>
+        <div class="rates" id="rateTable"></div>
+        <p class="muted small" id="rateCount"></p>
+      </div>
+
+
+      </div><!-- /view-fx -->
+
+      <div id="view-fee" hidden>
+        <div class="panel hero">
+          <div class="page-head">
+            <h1>💳 卡外币损耗</h1>
+            <p class="lead">按消费币种与实扣币种，对照中间价估算外币卡损耗。例：消费 100 CNY，实扣 14.8 USD。</p>
+          </div>
+          <div class="panel-body">
+            <div class="tabs fee-mode-tabs" id="feeModeTabs">
+              <button type="button" class="tab active" data-fee-mode="pct">损耗</button>
+              <button type="button" class="tab" data-fee-mode="amt">百分比</button>
+            </div>
+            <p id="feeModeHint" class="muted small fx-hint">例：消费 100 CNY，银行实扣 14.8 USD。可在下方切换汇率来源。</p>
+
+            <div class="fee-rate-box">
+              <div class="fee-rate-label">汇率来源</div>
+              <div class="tabs fee-provider-tabs" id="feeProviderTabs">
+                <button type="button" class="tab" data-fee-provider="frankfurter"><span class="tab-full">Frankfurter · ECB</span><span class="tab-short">ECB</span></button>
+                <button type="button" class="tab" data-fee-provider="open"><span class="tab-full">全球 · open.er-api</span><span class="tab-short">全球</span></button>
+                <button type="button" class="tab" data-fee-provider="wise"><span class="tab-full">Wise · mid-market</span><span class="tab-short">Wise</span></button>
+              </div>
+              <div class="fee-rate-bar">
+                <span id="feeRateSource" class="fee-rate-source">加载中…</span>
+                <button type="button" class="btn ghost btn-sm" id="feeRefreshRates">刷新汇率</button>
+              </div>
+            </div>
+
+            <!-- Mode A: spend vs charged, possibly different currencies -->
+            <div id="feeModePct" class="fee-mode">
+              <div class="fee-pair">
+                <div class="fee-leg">
+                  <div class="fee-leg-title">消费（应扣）</div>
+                  <div id="feeSpendCombo" class="ccy-combo" data-side="spend"></div>
+                  <input id="feeShould" class="input" type="number" inputmode="decimal" step="any" placeholder="例如 100">
+                </div>
+                <div class="fee-leg">
+                  <div class="fee-leg-title">银行实扣</div>
+                  <div id="feeChargeCombo" class="ccy-combo" data-side="charge"></div>
+                  <input id="feeActual" class="input" type="number" inputmode="decimal" step="any" placeholder="例如 14.8">
+                </div>
+              </div>
+            </div>
+
+            <!-- Mode B: pay amount + percent + actual pay currency -->
+            <div id="feeModeAmt" class="fee-mode" hidden>
+              <div class="fee-pair">
+                <div class="fee-leg">
+                  <div class="fee-leg-title">我应付</div>
+                  <div id="feePayCombo" class="ccy-combo" data-side="pay"></div>
+                  <input id="feePay" class="input" type="number" inputmode="decimal" step="any" placeholder="账单金额">
+                </div>
+                <div class="fee-leg">
+                  <div class="fee-leg-title">实际支付币种</div>
+                  <div id="feeActualPayCombo" class="ccy-combo" data-side="actual-pay"></div>
+                  <div class="fee-pct-wrap">
+                    <input id="feePct" class="input" type="number" inputmode="decimal" step="any" placeholder="例如 1.5">
+                    <span class="fee-pct-suffix">%</span>
+                  </div>
+                  <p class="muted small" style="margin:0">损耗百分比 · 结果按实际支付币种显示</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="fee-result" id="feeResult">
+              <div class="fee-metric">
+                <span class="fee-metric-label">中间价应扣</span>
+                <span class="fee-metric-value" id="feeFairAmt">—</span>
+              </div>
+              <div class="fee-metric">
+                <span class="fee-metric-label">损耗金额</span>
+                <span class="fee-metric-value" id="feeLossAmt">—</span>
+              </div>
+              <div class="fee-metric">
+                <span class="fee-metric-label">损耗比例</span>
+                <span class="fee-metric-value" id="feeLossPct">—</span>
+              </div>
+              <div class="fee-metric">
+                <span class="fee-metric-label">实际支付</span>
+                <span class="fee-metric-value" id="feePayTotal">—</span>
+              </div>
+              <div class="fee-metric fee-metric-wide">
+                <span class="fee-metric-label">参考汇率</span>
+                <span class="fee-metric-value fee-metric-rate" id="feeMidRate">—</span>
+              </div>
+            </div>
+            <p id="feeNote" class="muted small" style="margin-top:10px"></p>
+          </div>
+        </div>
+</div><!-- /view-fee -->
+
+      <footer class="foot">© 在线工具 · 开源 MIT · 数据仅保存在浏览器本地</footer>
+
+    <script>
   (function(){
-    'use strict';
     const $ = s => document.querySelector(s);
-    // Frankfurter 支持的常用币种
-    const CCY = [
-      ['USD','美元'], ['EUR','欧元'], ['CNY','人民币'], ['JPY','日元'],
-      ['GBP','英镑'], ['HKD','港币'], ['KRW','韩元'],
-      ['SGD','新加坡元'], ['AUD','澳元'], ['CAD','加元'], ['CHF','瑞士法郎'],
-      ['NZD','新西兰元'], ['THB','泰铢'], ['MYR','马来西亚林吉特'], ['IDR','印尼盾'],
-      ['INR','印度卢比'], ['PHP','菲律宾比索'], ['BRL','巴西雷亚尔'], ['MXN','墨西哥比索'],
-      ['TRY','土耳其里拉'], ['ZAR','南非兰特'], ['SEK','瑞典克朗'],
-      ['NOK','挪威克朗'], ['DKK','丹麦克朗'], ['PLN','波兰兹罗提'], ['CZK','捷克克朗'],
-      ['HUF','匈牙利福林'], ['ILS','以色列新谢克尔'], ['RON','罗马尼亚列伊'], ['ISK','冰岛克朗']
-    ];
-    const COMMON = ['USD','EUR','CNY','JPY','GBP','HKD','TWD','KRW','SGD','AUD','CAD','CHF'];
+    const $$ = s => [...document.querySelectorAll(s)];
 
-    let rates = null; // map base->{[code]: rate}
+    const CURRENCY_NAMES = {
+
+      USD: "美元",
+      EUR: "欧元",
+      CNY: "人民币",
+      JPY: "日元",
+      GBP: "英镑",
+      HKD: "港币",
+      TWD: "新台币",
+      KRW: "韩元",
+      SGD: "新加坡元",
+      AUD: "澳元",
+      CAD: "加元",
+      CHF: "瑞士法郎",
+      THB: "泰铢",
+      MYR: "马来西亚林吉特",
+      IDR: "印尼盾",
+      PHP: "菲律宾比索",
+      VND: "越南盾",
+      INR: "印度卢比",
+      RUB: "俄罗斯卢布",
+      BRL: "巴西雷亚尔",
+      MXN: "墨西哥比索",
+      NZD: "新西兰元",
+      SEK: "瑞典克朗",
+      NOK: "挪威克朗",
+      DKK: "丹麦克朗",
+      PLN: "波兰兹罗提",
+      TRY: "土耳其里拉",
+      AED: "阿联酋迪拉姆",
+      SAR: "沙特里亚尔",
+      ILS: "以色列新谢克尔",
+      CZK: "捷克克朗",
+      HUF: "匈牙利福林",
+      RON: "罗马尼亚列伊",
+      ZAR: "南非兰特",
+      CLP: "智利比索",
+      ARS: "阿根廷比索",
+      COP: "哥伦比亚比索",
+      PEN: "秘鲁索尔",
+      EGP: "埃及镑",
+      NGN: "尼日利亚奈拉",
+      PKR: "巴基斯坦卢比",
+      BDT: "孟加拉塔卡",
+      UAH: "乌克兰格里夫纳",
+      AFN: "阿富汗尼",
+      ALL: "阿尔巴尼亚列克",
+      AMD: "亚美尼亚德拉姆",
+      ANG: "荷属安的列斯盾",
+      AOA: "安哥拉宽扎",
+      AWG: "阿鲁巴弗罗林",
+      AZN: "阿塞拜疆马纳特",
+      BAM: "波黑可兑换马克",
+      BBD: "巴巴多斯元",
+      BGN: "保加利亚列弗",
+      BHD: "巴林第纳尔",
+      BIF: "布隆迪法郎",
+      BMD: "百慕大元",
+      BND: "文莱元",
+      BOB: "玻利维亚诺",
+      BSD: "巴哈马元",
+      BTN: "不丹努尔特鲁姆",
+      BWP: "博茨瓦纳普拉",
+      BYN: "白俄罗斯卢布",
+      BZD: "伯利兹元",
+      CDF: "刚果法郎",
+      CRC: "哥斯达黎加科朗",
+      CUP: "古巴比索",
+      CVE: "佛得角埃斯库多",
+      DJF: "吉布提法郎",
+      DOP: "多米尼加比索",
+      DZD: "阿尔及利亚第纳尔",
+      ERN: "厄立特里亚纳克法",
+      ETB: "埃塞俄比亚比尔",
+      FJD: "斐济元",
+      FKP: "福克兰群岛镑",
+      FOK: "法罗群岛克朗",
+      GEL: "格鲁吉亚拉里",
+      GGP: "根西镑",
+      GHS: "加纳塞地",
+      GIP: "直布罗陀镑",
+      GMD: "冈比亚达拉西",
+      GNF: "几内亚法郎",
+      GTQ: "危地马拉格查尔",
+      GYD: "圭亚那元",
+      HNL: "洪都拉斯伦皮拉",
+      HRK: "克罗地亚库纳",
+      HTG: "海地古德",
+      IMP: "马恩岛镑",
+      IQD: "伊拉克第纳尔",
+      IRR: "伊朗里亚尔",
+      ISK: "冰岛克朗",
+      JEP: "泽西镑",
+      JMD: "牙买加元",
+      JOD: "约旦第纳尔",
+      KES: "肯尼亚先令",
+      KGS: "吉尔吉斯斯坦索姆",
+      KHR: "柬埔寨瑞尔",
+      KID: "基里巴斯元",
+      KMF: "科摩罗法郎",
+      KWD: "科威特第纳尔",
+      KYD: "开曼群岛元",
+      KZT: "哈萨克斯坦坚戈",
+      LAK: "老挝基普",
+      LBP: "黎巴嫩镑",
+      LKR: "斯里兰卡卢比",
+      LRD: "利比里亚元",
+      LSL: "莱索托洛蒂",
+      LYD: "利比亚第纳尔",
+      MAD: "摩洛哥迪拉姆",
+      MDL: "摩尔多瓦列伊",
+      MGA: "马达加斯加阿里亚里",
+      MKD: "北马其顿第纳尔",
+      MMK: "缅甸元",
+      MNT: "蒙古图格里克",
+      MOP: "澳门元",
+      MRU: "毛里塔尼亚乌吉亚",
+      MUR: "毛里求斯卢比",
+      MVR: "马尔代夫拉菲亚",
+      MWK: "马拉维克瓦查",
+      MZN: "莫桑比克梅蒂卡尔",
+      NAD: "纳米比亚元",
+      NIO: "尼加拉瓜科多巴",
+      NPR: "尼泊尔卢比",
+      OMR: "阿曼里亚尔",
+      PAB: "巴拿马巴波亚",
+      PGK: "巴布亚新几内亚基那",
+      PYG: "巴拉圭瓜拉尼",
+      QAR: "卡塔尔里亚尔",
+      RSD: "塞尔维亚第纳尔",
+      RWF: "卢旺达法郎",
+      SBD: "所罗门群岛元",
+      SCR: "塞舌尔卢比",
+      SDG: "苏丹镑",
+      SHP: "圣赫勒拿镑",
+      SLE: "塞拉利昂利昂",
+      SOS: "索马里先令",
+      SRD: "苏里南元",
+      SSP: "南苏丹镑",
+      STN: "圣多美多布拉",
+      SYP: "叙利亚镑",
+      SZL: "斯威士兰里兰吉尼",
+      TJS: "塔吉克斯坦索莫尼",
+      TMT: "土库曼斯坦马纳特",
+      TND: "突尼斯第纳尔",
+      TOP: "汤加潘加",
+      TTD: "特立尼达多巴哥元",
+      TVD: "图瓦卢元",
+      TZS: "坦桑尼亚先令",
+      UGX: "乌干达先令",
+      UYU: "乌拉圭比索",
+      UZS: "乌兹别克斯坦苏姆",
+      VES: "委内瑞拉玻利瓦尔",
+      VUV: "瓦努阿图瓦图",
+      WST: "萨摩亚塔拉",
+      XAF: "中非法郎",
+      XCD: "东加勒比元",
+      XCG: "加勒比盾",
+      XDR: "特别提款权",
+      XOF: "西非法郎",
+      XPF: "太平洋法郎",
+      YER: "也门里亚尔",
+      ZMW: "赞比亚克瓦查",
+      ZWL: "津巴布韦元"
+    };
+
+    // A–Z only (no popular-first pinning in selects / table)
+    function orderedCodes(codeSet){
+      return [...new Set(codeSet)].filter(Boolean).sort((a, b) => a.localeCompare(b));
+    }
+
+    function currencyLabel(code){
+      const name = CURRENCY_NAMES[code];
+      return name ? `${code} · ${name}` : code;
+    }
+
+    // Priority list only for Wise progressive first paint (not for UI order)
+    const WISE_PRIORITY = ["USD","EUR","CNY","JPY","GBP","HKD","TWD","KRW","SGD","AUD","CAD","CHF","THB","MYR","IDR","PHP","VND","INR","RUB","BRL","MXN","NZD","SEK","NOK","DKK","PLN","TRY","AED","SAR","ILS","CZK","HUF","RON","ZAR","CLP","ARS","COP","PEN","EGP","NGN","PKR","BDT","UAH"];
+
+    const PROVIDERS = {
+      frankfurter: {
+        label: 'Frankfurter · ECB',
+        hint: '欧洲央行参考价，约 30 种主要法币，日更。不支持的基准币会自动回退到 USD/EUR。',
+        SUPPORTED: null,
+        async loadSupported(){
+          if(this.SUPPORTED) return this.SUPPORTED;
+          try{
+            const resp = await fetch('https://api.frankfurter.dev/v1/currencies');
+            if(resp.ok){
+              const data = await resp.json();
+              this.SUPPORTED = new Set(Object.keys(data || {}));
+              return this.SUPPORTED;
+            }
+          }catch(_e){}
+          this.SUPPORTED = new Set(['AUD','BRL','CAD','CHF','CNY','CZK','DKK','EUR','GBP','HKD','HUF','IDR','ILS','INR','ISK','JPY','KRW','MXN','MYR','NOK','NZD','PHP','PLN','RON','SEK','SGD','THB','TRY','USD','ZAR']);
+          return this.SUPPORTED;
+        },
+        async fetch(base){
+          const supported = await this.loadSupported();
+          let b = String(base || 'USD').toUpperCase();
+          if(!supported.has(b)) b = supported.has('USD') ? 'USD' : 'EUR';
+          const endpoints = [
+            'https://api.frankfurter.dev/v1/latest?base=' + encodeURIComponent(b),
+            'https://api.frankfurter.app/latest?base=' + encodeURIComponent(b)
+          ];
+          let lastErr = null;
+          for(const url of endpoints){
+            try{
+              const resp = await fetch(url);
+              if(!resp.ok){ lastErr = new Error('HTTP ' + resp.status); continue; }
+              const data = await resp.json();
+              const rates = Object.assign({}, data.rates || {});
+              rates[data.base] = 1;
+              const clean = {};
+              Object.keys(rates).forEach(k => {
+                if(supported.has(k) || k === data.base) clean[k] = rates[k];
+              });
+              clean[data.base] = 1;
+              const req = String(base || '').toUpperCase();
+              const note = (req && req !== data.base) ? ('（' + req + ' 非 ECB 支持，已用 ' + data.base + '）') : '';
+              return {
+                base: data.base,
+                date: data.date,
+                rates: clean,
+                source: 'Frankfurter / ECB' + note
+              };
+            }catch(err){ lastErr = err; }
+          }
+          throw lastErr || new Error('Frankfurter unavailable');
+        }
+      },
+      open: {
+        label: '全球 · open.er-api',
+        hint: '全球 160+ 法币综合参考价（open.er-api），适合覆盖冷门币种。',
+        async fetch(base){
+          const url = `https://open.er-api.com/v6/latest/${encodeURIComponent(base)}`;
+          const resp = await fetch(url);
+          if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const data = await resp.json();
+          if(data.result && data.result !== 'success') throw new Error(data['error-type'] || 'open.er-api error');
+          const rates = Object.assign({}, data.rates || {});
+          const b = data.base_code || base;
+          rates[b] = 1;
+          return { base: b, date: data.time_last_update_utc || '', rates, source: 'open.er-api' };
+        }
+      },
+      wise: {
+        label: 'Wise · mid-market',
+        hint: 'Wise 中间市场价（mid-market，不含手续费）。先加载常用币种，再后台补全约 160 种。',
+        async fetch(base, { onPartial } = {}){
+          const rates = { [base]: 1 };
+          let date = '';
+          const preferred = [comboFrom.get(), comboTo.get(), localStorage.getItem('fx.from'), localStorage.getItem('fx.to')]
+            .filter(Boolean).map(c => String(c).toUpperCase());
+          const priority = [...new Set([...preferred, ...WISE_PRIORITY])]
+            .filter(c => c && c !== base)
+            .slice(0, 36);
+          const pUrl = `/api/wise-rates?source=${encodeURIComponent(base)}&targets=${priority.join(',')}`;
+          const pResp = await fetch(pUrl, { cache: 'no-store' });
+          const pData = await pResp.json().catch(() => ({}));
+          if(!pResp.ok) throw new Error(pData.error || `HTTP ${pResp.status}`);
+          Object.assign(rates, pData.rates || {});
+          rates[base] = 1;
+          if(pData.date) date = pData.date;
+          if(typeof onPartial === 'function'){
+            onPartial({ base, date, rates: Object.assign({}, rates), source: `Wise mid-market · ${Object.keys(rates).length} 种（常用）`, partial: true });
+          }
+          let page = 0, totalPages = 1;
+          while(page < totalPages && page < 12){
+            const url = `/api/wise-rates?source=${encodeURIComponent(base)}&page=${page}&size=40`;
+            const resp = await fetch(url, { cache: 'no-store' });
+            const data = await resp.json().catch(() => ({}));
+            if(!resp.ok) break;
+            Object.assign(rates, data.rates || {});
+            rates[base] = 1;
+            if(data.date) date = data.date;
+            if(typeof data.totalPages === 'number' && data.totalPages > 0) totalPages = data.totalPages;
+            else if(data.hasMore) totalPages = page + 2;
+            else totalPages = page + 1;
+            page += 1;
+            if(typeof onPartial === 'function'){
+              onPartial({ base, date, rates: Object.assign({}, rates), source: `Wise mid-market · ${Object.keys(rates).length} 种（加载中…）`, partial: true });
+            }
+          }
+          return { base, date, rates, source: `Wise mid-market · ${Object.keys(rates).length} 种`, partial: false };
+        }
+      }
+    };
+
+    let provider = localStorage.getItem('fx.provider') || 'open';
+    if(!PROVIDERS[provider]) provider = 'open';
+    let rates = null;
     let activeBase = 'USD';
+    let loading = false;
+    let rateFilter = '';
+    let lastEdit = 'from'; // which amount field user last edited
 
-    function fillSelect(el, defVal){
-      el.innerHTML = CCY.map(([c,n]) => `<option value="${c}">${c} · ${n}</option>`).join('');
-      el.value = defVal;
+    let autoEnabled = localStorage.getItem('fx.auto') === '1';
+    let autoSec = parseInt(localStorage.getItem('fx.autoSec') || '30', 10);
+    if(![10,15,30,60,120,300].includes(autoSec)) autoSec = 30;
+    let leftSec = autoSec;
+    let tickTimer = null;
+
+    // ---------- Searchable currency combobox ----------
+    function createCombo(root, initial, onChange){
+      let codes = orderedCodes(Object.keys(CURRENCY_NAMES));
+      let value = codes.includes(initial) ? initial : (codes[0] || 'USD');
+      let open = false;
+      let activeIdx = 0;
+      let filtered = codes.slice();
+
+      root.innerHTML = `
+        <button type="button" class="input ccy-combo-btn" aria-haspopup="listbox" aria-expanded="false">
+          <span class="ccy-combo-label"></span>
+          <span class="ccy-combo-caret">▾</span>
+        </button>
+        <div class="ccy-combo-panel" hidden>
+          <input class="ccy-combo-search" type="search" placeholder="点此搜索代码 / 中文名…" autocomplete="off" spellcheck="false">
+          <div class="ccy-combo-list" role="listbox"></div>
+        </div>`;
+      const btn = root.querySelector('.ccy-combo-btn');
+      const label = root.querySelector('.ccy-combo-label');
+      const panel = root.querySelector('.ccy-combo-panel');
+      const search = root.querySelector('.ccy-combo-search');
+      const list = root.querySelector('.ccy-combo-list');
+
+      function paintLabel(){
+        label.textContent = currencyLabel(value);
+        btn.title = currencyLabel(value);
+      }
+
+      function renderList(){
+        const q = (search.value || '').trim().toLowerCase();
+        filtered = codes.filter(c => {
+          if(!q) return true;
+          const name = (CURRENCY_NAMES[c] || '').toLowerCase();
+          return c.toLowerCase().includes(q) || name.includes(q);
+        });
+        if(!filtered.length){
+          list.innerHTML = `<div class="ccy-combo-empty">无匹配币种</div>`;
+          return;
+        }
+        if(activeIdx >= filtered.length) activeIdx = 0;
+        list.innerHTML = filtered.map((c, i) => `
+          <div class="ccy-combo-item${i===activeIdx?' active':''}${c===value?' selected':''}" data-code="${c}" role="option" aria-selected="${c===value}">
+            <span class="code">${c}</span>
+            <span class="name">${CURRENCY_NAMES[c] || ''}</span>
+          </div>`).join('');
+      }
+
+      function setOpen(v){
+        open = !!v;
+        root.classList.toggle('open', open);
+        panel.hidden = !open;
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if(open){
+          search.value = '';
+          activeIdx = Math.max(0, filtered.indexOf(value));
+          renderList();
+          // Do NOT autofocus search — on mobile that forces the keyboard open
+          // as soon as the user only wants to pick a currency.
+        }
+      }
+
+      function setValue(code, fire){
+        if(!code) return;
+        code = String(code).toUpperCase();
+        if(codes.length && !codes.includes(code)) return;
+        value = code;
+        paintLabel();
+        if(fire !== false && typeof onChange === 'function') onChange(value);
+      }
+
+      function setCodes(nextCodes, preferred){
+        codes = orderedCodes(nextCodes);
+        if(preferred && codes.includes(preferred)) value = preferred;
+        else if(!codes.includes(value)) value = codes[0] || value;
+        paintLabel();
+        if(open) renderList();
+      }
+
+      btn.addEventListener('click', () => setOpen(!open));
+      search.addEventListener('input', () => { activeIdx = 0; renderList(); });
+      search.addEventListener('keydown', e => {
+        if(e.key === 'ArrowDown'){ e.preventDefault(); activeIdx = Math.min(activeIdx+1, Math.max(0, filtered.length-1)); renderList(); list.querySelector('.active')?.scrollIntoView({block:'nearest'}); }
+        else if(e.key === 'ArrowUp'){ e.preventDefault(); activeIdx = Math.max(activeIdx-1, 0); renderList(); list.querySelector('.active')?.scrollIntoView({block:'nearest'}); }
+        else if(e.key === 'Enter'){ e.preventDefault(); if(filtered[activeIdx]){ setValue(filtered[activeIdx], true); setOpen(false);} }
+        else if(e.key === 'Escape'){ e.preventDefault(); setOpen(false); btn.focus(); }
+      });
+      list.addEventListener('click', e => {
+        const item = e.target.closest('.ccy-combo-item');
+        if(!item) return;
+        setValue(item.dataset.code, true);
+        setOpen(false);
+      });
+      const onDocClick = (e) => {
+        if(open && !root.contains(e.target)) setOpen(false);
+      };
+      if(window.__pageOn) window.__pageOn(document, 'click', onDocClick);
+      else document.addEventListener('click', onDocClick);
+
+      paintLabel();
+      return {
+        get: () => value,
+        set: (code, fire) => setValue(code, fire),
+        setCodes,
+        close: () => setOpen(false)
+      };
     }
-    fillSelect($('#curFrom'), 'USD');
-    fillSelect($('#curTo'), 'CNY');
 
-    async function fetchRates(base){
+    const comboFrom = createCombo(
+      $('#comboFrom'),
+      localStorage.getItem('fx.from') || 'USD',
+      (code) => {
+        localStorage.setItem('fx.from', code);
+        // if rates cover both, recompute; else fetch
+        const to = comboTo.get();
+        if(rates && rates.rates && rates.rates[code] != null && rates.rates[to] != null){
+          compute(lastEdit === 'to');
+        } else {
+          fetchRates(code);
+        }
+      }
+    );
+    const comboTo = createCombo(
+      $('#comboTo'),
+      localStorage.getItem('fx.to') || 'CNY',
+      (code) => {
+        localStorage.setItem('fx.to', code);
+        compute(lastEdit === 'to');
+      }
+    );
+
+    // ensure not same currency initially if possible
+    if(comboFrom.get() === comboTo.get()){
+      const alt = orderedCodes(Object.keys(CURRENCY_NAMES)).find(c => c !== comboFrom.get());
+      if(alt) comboTo.set(alt, false);
+    }
+
+    function setProviderUI(){
+      $$('#providerTabs .tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.provider === provider);
+      });
+      $('#providerHint').textContent = PROVIDERS[provider].hint;
+    }
+
+    function formatRate(v){
+      if(v == null || isNaN(v)) return '—';
+      const n = Number(v);
+      if(n === 0) return '0';
+      if(n >= 1000) return n.toFixed(2);
+      if(n >= 1) return n.toFixed(4);
+      if(n >= 0.01) return n.toFixed(6);
+      return n.toPrecision(4);
+    }
+
+    function cacheKey(p, base){
+      return `fx.cache.${p || provider}.${(base || 'USD').toUpperCase()}`;
+    }
+
+    function readCache(p, base){
       try{
-        $('#status').textContent = '加载中…';
-        const url = `https://api.frankfurter.dev/v1/latest?base=${base}`;
-        const resp = await fetch(url);
-        if(!resp.ok) throw new Error('HTTP ' + resp.status);
-        const data = await resp.json();
-        if(!data || !data.rates) throw new Error('返回数据异常');
-        // ensure base itself = 1
-        data.rates[base] = 1;
-        rates = data;
-        activeBase = base;
-        $('#baseLabel').textContent = base;
-        $('#status').textContent = '已更新 · ' + (data.date || '');
-        renderTable();
-        compute();
-      } catch(e){
-        $('#status').textContent = '加载失败：' + e.message;
-      }
+        // prefer provider+base, then provider any base
+        const keys = [
+          cacheKey(p, base),
+          cacheKey(p, 'USD'),
+          // legacy single-key
+          'fx.cache'
+        ];
+        // also scan localStorage for latest matching provider
+        let best = null;
+        for(const k of keys){
+          const raw = localStorage.getItem(k);
+          if(!raw) continue;
+          const obj = JSON.parse(raw);
+          if(!obj || !obj.data || !obj.data.rates) continue;
+          if(obj.provider && obj.provider !== (p || provider)) continue;
+          if(!best || (obj.savedAt || 0) > (best.savedAt || 0)) best = obj;
+        }
+        // scan all fx.cache.* for this provider
+        for(let i=0;i<localStorage.length;i++){
+          const k = localStorage.key(i);
+          if(!k || !k.startsWith('fx.cache.')) continue;
+          try{
+            const obj = JSON.parse(localStorage.getItem(k));
+            if(obj && obj.provider === (p || provider) && obj.data && obj.data.rates){
+              if(!best || (obj.savedAt || 0) > (best.savedAt || 0)) best = obj;
+            }
+          }catch(_){}
+        }
+        return best;
+      }catch(_){ return null; }
     }
 
-    function renderTable(){
-      const tb = $('#rates-table tbody');
-      tb.innerHTML = '';
-      for(const [c,n] of CCY){
-        if(c === activeBase) continue;
-        if(!rates.rates[c]) continue;
-        const r = rates.rates[c];
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${n}</td><td>${c}</td><td>${formatRate(r)}</td>`;
-        tb.appendChild(tr);
-      }
+    function writeCache(data){
+      try{
+        const payload = { provider, savedAt: Date.now(), data };
+        localStorage.setItem(cacheKey(provider, data.base || 'USD'), JSON.stringify(payload));
+        // also keep legacy key for older builds
+        localStorage.setItem('fx.cache', JSON.stringify(payload));
+      }catch(_){}
     }
-    function formatRate(r){
-      if(r >= 100) return r.toFixed(2);
-      if(r >= 1) return r.toFixed(4);
-      return r.toPrecision(5);
+
+    function formatWhen(date){
+      if(date == null || date === '') return '刚刚';
+      if(typeof date === 'number' || /^\d+$/.test(String(date))){
+        let n = Number(date);
+        if(n < 1e12) n *= 1000;
+        const d = new Date(n);
+        if(!isNaN(d)) return d.toLocaleString();
+      }
+      const d = new Date(date);
+      if(!isNaN(d)) return d.toLocaleString();
+      return String(date);
     }
 
     function convert(amount, from, to){
-      if(!rates) return null;
-      // need to express via base
-      if(from === activeBase){
-        return amount * (rates.rates[to] || (to === activeBase ? 1 : 0));
-      }
-      // convert via base
+      if(!rates || !rates.rates) return null;
+      if(from === to) return amount;
       const fromRate = rates.rates[from];
       const toRate = rates.rates[to];
-      if(!fromRate || !toRate) return null;
-      const inBase = amount / fromRate;
-      return inBase * toRate;
+      if(fromRate == null || toRate == null) return null;
+      return (amount / fromRate) * toRate;
     }
 
+    // reverse=false: from → to; reverse=true: to → from
     function compute(reverse){
-      const from = $('#curFrom').value, to = $('#curTo').value;
+      if(!rates) return;
+      const from = comboFrom.get(), to = comboTo.get();
       if(reverse){
         const amount = parseFloat($('#amtTo').value);
         if(isNaN(amount)) return;
@@ -152,23 +728,530 @@
       }
     }
 
-    $('#amtFrom').addEventListener('input', () => compute(false));
-    $('#amtTo').addEventListener('input', () => compute(true));
-    $('#curFrom').addEventListener('change', () => fetchRates($('#curFrom').value));
-    $('#curTo').addEventListener('change', () => compute(false));
-    $('#swap').addEventListener('click', () => {
-      const f = $('#curFrom').value, t = $('#curTo').value;
-      $('#curFrom').value = t; $('#curTo').value = f;
-      const af = $('#amtFrom').value;
-      $('#amtFrom').value = $('#amtTo').value; $('#amtTo').value = af;
-      fetchRates(t);
-    });
-    $('#refresh').addEventListener('click', () => fetchRates($('#curFrom').value));
+    function renderTable(){
+      const box = $('#rateTable');
+      if(!rates){ box.innerHTML = ''; $('#rateCount').textContent = ''; return; }
+      const q = rateFilter.trim().toLowerCase();
+      const codes = orderedCodes(Object.keys(rates.rates)).filter(c => {
+        if(!q) return true;
+        const name = (CURRENCY_NAMES[c] || '').toLowerCase();
+        return c.toLowerCase().includes(q) || name.includes(q);
+      });
+      box.innerHTML = codes.map(c => {
+        const v = rates.rates[c];
+        const name = CURRENCY_NAMES[c] || '';
+        return `<div class="kv"><span class="code">${c}${name ? ' · ' + name : ''}</span><span>${formatRate(v)}</span></div>`;
+      }).join('');
+      $('#rateCount').textContent = q
+        ? `显示 ${codes.length} / ${Object.keys(rates.rates).length} 种`
+        : `共 ${Object.keys(rates.rates).length} 种货币 · A–Z`;
+    }
 
-    fetchRates('USD');
+    function updateCountdownUI(){
+      const el = $('#countdown');
+      const chip = $('#liveChip');
+      if(chip) chip.dataset.on = autoEnabled ? 'true' : 'false';
+      const sw = $('#autoRefresh');
+      if(sw) sw.setAttribute('aria-checked', autoEnabled ? 'true' : 'false');
+      if(!autoEnabled){ el.textContent = '已关闭'; el.dataset.state = 'off'; return; }
+      if(document.hidden){ el.textContent = '已暂停'; el.dataset.state = 'paused'; return; }
+      if(loading){ el.textContent = '刷新中…'; el.dataset.state = 'loading'; return; }
+      el.textContent = leftSec > 0 ? (leftSec + 's') : '…';
+      el.dataset.state = 'live';
+    }
+
+    function clearTick(){ if(tickTimer){ clearInterval(tickTimer); tickTimer = null; } }
+
+    function armCountdown(reset){
+      clearTick();
+      if(!autoEnabled){ updateCountdownUI(); return; }
+      if(reset) leftSec = autoSec;
+      updateCountdownUI();
+      tickTimer = setInterval(() => {
+        if(document.hidden || loading){ updateCountdownUI(); return; }
+        leftSec -= 1;
+        if(leftSec <= 0){
+          leftSec = autoSec;
+          fetchRates(comboFrom.get(), { silent: true });
+        }
+        updateCountdownUI();
+      }, 1000);
+    }
+
+    function setAuto(enabled){
+      autoEnabled = !!enabled;
+      localStorage.setItem('fx.auto', autoEnabled ? '1' : '0');
+      $('#autoRefresh').checked = autoEnabled;
+      if(autoEnabled) armCountdown(true);
+      else { clearTick(); updateCountdownUI(); }
+    }
+
+    function applyData(data){
+      rates = data;
+      activeBase = data.base;
+      const prevFrom = comboFrom.get();
+      const prevTo = comboTo.get();
+      comboFrom.setCodes(Object.keys(data.rates), prevFrom);
+      comboTo.setCodes(Object.keys(data.rates), prevTo);
+      if(data.rates[comboFrom.get()] == null) comboFrom.set(data.base, false);
+      if(data.rates[comboTo.get()] == null){
+        const prefer = orderedCodes(Object.keys(data.rates)).find(c => c !== comboFrom.get());
+        if(prefer) comboTo.set(prefer, false);
+      }
+      $('#baseLabel').textContent = data.base;
+      renderTable();
+      compute(lastEdit === 'to');
+      writeCache(data);
+      try{ if(typeof window.__fxOnRates === 'function') window.__fxOnRates(); }catch(_e){}
+      const when = formatWhen(data.date);
+      const n = Object.keys(data.rates).length;
+      const suffix = data.partial ? ' · 继续补全中…' : '';
+      $('#status').textContent = `已更新 · ${data.source || PROVIDERS[provider].label} · ${when} · ${n} 种${suffix}`;
+    }
+
+    async function fetchRates(base, opts = {}){
+      const silent = !!opts.silent;
+      if(loading && !opts.force) return;
+      loading = true;
+      if(!silent){
+        if(rates && rates.rates && Object.keys(rates.rates).length > 1){
+          // keep showing current/cache list while refreshing
+          const n = Object.keys(rates.rates).length;
+          $('#status').textContent = (provider === 'wise' ? '缓存展示中 · 正在后台刷新…' : '刷新中…') + ` · ${n} 种`;
+        } else {
+          $('#status').textContent = provider === 'wise' ? '加载常用汇率…' : '加载中…';
+        }
+      }
+      updateCountdownUI();
+      try{
+        const onPartial = (provider === 'wise')
+          ? (partial) => {
+              if(loading){ loading = false; updateCountdownUI(); }
+              applyData(partial);
+            }
+          : null;
+        const data = await PROVIDERS[provider].fetch(base, { onPartial });
+        applyData(data);
+        if(autoEnabled) leftSec = autoSec;
+      }catch(e){
+        if(!rates){
+          $('#status').textContent = '加载失败：' + (e.message || e);
+          $('#rateTable').innerHTML = '';
+        } else {
+          $('#status').textContent = '刷新失败：' + (e.message || e) + '（仍显示上次数据）';
+        }
+      }finally{
+        loading = false;
+        updateCountdownUI();
+      }
+    }
+
+    // bidirectional amount inputs
+    $('#amtFrom').addEventListener('input', () => { lastEdit = 'from'; compute(false); });
+    $('#amtTo').addEventListener('input', () => { lastEdit = 'to'; compute(true); });
+
+    $('#swap').addEventListener('click', () => {
+      const f = comboFrom.get();
+      const tcur = comboTo.get();
+      const at = $('#amtTo').value;
+      const af = $('#amtFrom').value;
+
+      comboFrom.set(tcur, false);
+      comboTo.set(f, false);
+      localStorage.setItem('fx.from', tcur);
+      localStorage.setItem('fx.to', f);
+
+      // keep continuous value: previous output becomes new input on the last-edited side
+      if(lastEdit === 'to'){
+        // user was editing target; after swap, that value is now on from
+        if(at !== '' && !isNaN(parseFloat(at))) $('#amtFrom').value = at;
+        lastEdit = 'from';
+      } else {
+        if(at !== '' && !isNaN(parseFloat(at))) $('#amtFrom').value = at;
+        lastEdit = 'from';
+      }
+
+      // Never mutate activeBase — recompute from existing relative rates
+      if(rates && rates.rates && rates.rates[tcur] != null && rates.rates[f] != null){
+        compute(false);
+      } else {
+        fetchRates(tcur);
+      }
+    });
+
+    $('#refresh').addEventListener('click', () => fetchRates(comboFrom.get()));
+    $('#rateSearch').addEventListener('input', e => { rateFilter = e.target.value || ''; renderTable(); });
+
+    $$('#providerTabs .tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const p = btn.dataset.provider;
+        if(!PROVIDERS[p] || p === provider) return;
+        provider = p;
+        localStorage.setItem('fx.provider', provider);
+        setProviderUI();
+        // Instant paint from provider cache (Wise especially)
+        try{
+          const cached = readCache(provider, comboFrom.get() || 'USD');
+          if(cached && cached.data && cached.data.rates
+             && (Date.now() - (cached.savedAt || 0) < 12 * 60 * 60 * 1000)){
+            applyData(cached.data);
+            const ageMin = Math.max(0, Math.round((Date.now() - cached.savedAt) / 60000));
+            $('#status').textContent = `缓存 · ${cached.data.source || provider} · ${ageMin} 分钟前 · ${Object.keys(cached.data.rates).length} 种 · 刷新中…`;
+          } else {
+            rates = null;
+            $('#rateTable').innerHTML = '';
+            $('#status').textContent = provider === 'wise' ? '加载 Wise 汇率…' : '加载中…';
+          }
+        }catch(_){}
+        fetchRates(comboFrom.get() || 'USD');
+      });
+    });
+
+    $('#autoRefresh').addEventListener('change', e => setAuto(e.target.checked));
+    $('#autoInterval').addEventListener('change', e => {
+      autoSec = parseInt(e.target.value, 10) || 30;
+      localStorage.setItem('fx.autoSec', String(autoSec));
+      if(autoEnabled) armCountdown(true);
+    });
+    const onVis = () => {
+      if(!autoEnabled) return;
+      if(!document.hidden) leftSec = Math.min(leftSec, 3);
+      updateCountdownUI();
+    };
+    if(window.__pageOn) window.__pageOn(document, 'visibilitychange', onVis);
+    else document.addEventListener('visibilitychange', onVis);
+
+    // init
+    setProviderUI();
+    $('#autoRefresh').checked = autoEnabled;
+    $('#autoInterval').value = String(autoSec);
+    updateCountdownUI();
+
+    try{
+      // Prefer cached rates for current provider (esp. Wise full catalog)
+      const cached = readCache(provider, comboFrom.get() || 'USD');
+      if(cached && cached.data && cached.data.rates
+         && (Date.now() - (cached.savedAt || 0) < 12 * 60 * 60 * 1000)){
+        applyData(cached.data);
+        const ageMin = Math.max(0, Math.round((Date.now() - cached.savedAt) / 60000));
+        const n = Object.keys(cached.data.rates).length;
+        $('#status').textContent = `缓存 · ${cached.data.source || provider} · ${ageMin} 分钟前 · ${n} 种`;
+      }
+    }catch(_){}
+
+    fetchRates(comboFrom.get() || 'USD').then(() => {
+      if(autoEnabled) armCountdown(true);
+    });
+
+    // ---------- 卡外币损耗（二级菜单，支持跨币种） ----------
+    (function initFeeCalc(){
+      const viewFx = document.getElementById('view-fx');
+      const viewFee = document.getElementById('view-fee');
+      const subnav = document.getElementById('moneySubnav');
+      if(!viewFx || !viewFee || !subnav) return;
+
+      let feeMode = localStorage.getItem('fx.feeMode') || 'pct';
+      if(feeMode !== 'pct' && feeMode !== 'amt') feeMode = 'pct';
+
+      function money(n){
+        if(n == null || !isFinite(n)) return '—';
+        const abs = Math.abs(n);
+        const d = abs >= 1000 ? 2 : abs >= 1 ? 4 : 6;
+        return (Math.round(n * Math.pow(10,d)) / Math.pow(10,d)).toLocaleString(undefined, {
+          maximumFractionDigits: d,
+          minimumFractionDigits: 0
+        });
+      }
+
+      function fmtPct(pct){
+        if(pct == null || !isFinite(pct)) return '—';
+        return (Math.round(pct * 10000) / 10000).toFixed(4).replace(/\.?0+$/,'') + '%';
+      }
+
+      function codeSet(){
+        if(rates && rates.rates) return Object.keys(rates.rates);
+        return Object.keys(CURRENCY_NAMES);
+      }
+
+      // Combos for fee currencies (reuse createCombo)
+      const feeSpendCombo = createCombo(
+        document.getElementById('feeSpendCombo'),
+        localStorage.getItem('fx.feeSpend') || localStorage.getItem('fx.to') || 'CNY',
+        (code) => { localStorage.setItem('fx.feeSpend', code); calcFee(); }
+      );
+      const feeChargeCombo = createCombo(
+        document.getElementById('feeChargeCombo'),
+        localStorage.getItem('fx.feeCharge') || localStorage.getItem('fx.from') || 'USD',
+        (code) => { localStorage.setItem('fx.feeCharge', code); calcFee(); }
+      );
+      const feePayCombo = createCombo(
+        document.getElementById('feePayCombo'),
+        localStorage.getItem('fx.feePayCcy') || localStorage.getItem('fx.to') || 'CNY',
+        (code) => { localStorage.setItem('fx.feePayCcy', code); calcFee(); }
+      );
+      const feeActualPayCombo = createCombo(
+        document.getElementById('feeActualPayCombo'),
+        localStorage.getItem('fx.feeActualPayCcy') || localStorage.getItem('fx.from') || 'USD',
+        (code) => { localStorage.setItem('fx.feeActualPayCcy', code); calcFee(); }
+      );
+
+      function syncFeeCombos(){
+        const codes = codeSet();
+        feeSpendCombo.setCodes(codes, feeSpendCombo.get());
+        feeChargeCombo.setCodes(codes, feeChargeCombo.get());
+        feePayCombo.setCodes(codes, feePayCombo.get());
+        feeActualPayCombo.setCodes(codes, feeActualPayCombo.get());
+        updateFeeRateSource();
+        calcFee();
+      }
+
+      function updateFeeRateSource(){
+        const el = document.getElementById('feeRateSource');
+        if(!el) return;
+        // sync provider tab active state
+        document.querySelectorAll('#feeProviderTabs .tab').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.feeProvider === provider);
+        });
+        if(rates && rates.rates){
+          const n = Object.keys(rates.rates).length;
+          el.textContent = `${rates.source || PROVIDERS[provider].label} · ${n} 种 · 基准 ${rates.base || activeBase}`;
+        } else {
+          el.textContent = '尚未加载汇率，点「刷新汇率」或切换来源';
+        }
+      }
+
+      function setFeeProvider(p){
+        if(!PROVIDERS[p]) return;
+        if(p === provider && rates && rates.rates){
+          updateFeeRateSource();
+          calcFee();
+          return;
+        }
+        // reuse main provider switch path so cache/paint stay consistent
+        provider = p;
+        localStorage.setItem('fx.provider', provider);
+        // keep fx page tabs in sync if present
+        document.querySelectorAll('#providerTabs .tab').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.provider === provider);
+        });
+        if(typeof setProviderUI === 'function') setProviderUI();
+        updateFeeRateSource();
+        // cache first
+        try{
+          const cached = readCache(provider, comboFrom.get() || feeChargeCombo.get() || 'USD');
+          if(cached && cached.data && cached.data.rates
+             && (Date.now() - (cached.savedAt || 0) < 12 * 60 * 60 * 1000)){
+            applyData(cached.data);
+            const ageMin = Math.max(0, Math.round((Date.now() - cached.savedAt) / 60000));
+            const n = Object.keys(cached.data.rates).length;
+            document.getElementById('feeRateSource').textContent =
+              `缓存 · ${cached.data.source || provider} · ${ageMin} 分钟前 · ${n} 种 · 刷新中…`;
+          } else {
+            document.getElementById('feeRateSource').textContent = '加载 ' + (PROVIDERS[provider].label) + '…';
+          }
+        }catch(_e){}
+        fetchRates(comboFrom.get() || feeChargeCombo.get() || 'USD').then(() => {
+          syncFeeCombos();
+        });
+      }
+
+      function setView(view){
+        const isFee = view === 'fee';
+        viewFx.hidden = isFee;
+        viewFee.hidden = !isFee;
+        subnav.querySelectorAll('.tab').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.moneyView === view);
+        });
+        localStorage.setItem('fx.moneyView', isFee ? 'fee' : 'fx');
+        if(isFee){
+          syncFeeCombos();
+          // ensure rates exist
+          if(!rates || !rates.rates){
+            fetchRates(comboFrom.get() || 'USD');
+          }
+        }
+      }
+
+      function setFeeMode(mode){
+        feeMode = mode === 'amt' ? 'amt' : 'pct';
+        localStorage.setItem('fx.feeMode', feeMode);
+        document.getElementById('feeModePct').hidden = feeMode !== 'pct';
+        document.getElementById('feeModeAmt').hidden = feeMode !== 'amt';
+        document.querySelectorAll('#feeModeTabs .tab').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.feeMode === feeMode);
+        });
+        const hint = document.getElementById('feeModeHint');
+        if(hint){
+          hint.textContent = feeMode === 'pct'
+            ? '例：消费 100 CNY，银行实扣 14.8 USD。选择汇率来源后用中间价换算比较。'
+            : '输入应付金额、实际支付币种与损耗百分比。跨币种时先按中间价换算再算损耗。';
+        }
+        calcFee();
+      }
+
+      function calcFee(){
+        const fairEl = document.getElementById('feeFairAmt');
+        const lossAmtEl = document.getElementById('feeLossAmt');
+        const lossPctEl = document.getElementById('feeLossPct');
+        const payTotalEl = document.getElementById('feePayTotal');
+        const midEl = document.getElementById('feeMidRate');
+        const noteEl = document.getElementById('feeNote');
+        if(!lossAmtEl) return;
+
+        const clear = (msg) => {
+          fairEl.textContent = '—';
+          lossAmtEl.textContent = '—';
+          lossPctEl.textContent = '—';
+          payTotalEl.textContent = '—';
+          midEl.textContent = '—';
+          noteEl.textContent = msg || '';
+          lossAmtEl.classList.remove('pos','neg');
+        };
+
+        if(feeMode === 'pct'){
+          const spendCcy = feeSpendCombo.get();
+          const chargeCcy = feeChargeCombo.get();
+          const spendAmt = parseFloat(document.getElementById('feeShould').value);
+          const chargeAmt = parseFloat(document.getElementById('feeActual').value);
+
+          if(!isFinite(spendAmt) || !isFinite(chargeAmt)){
+            clear('填写消费金额与实扣金额后自动计算');
+            return;
+          }
+
+          // Convert spend → charge currency at mid-market
+          let fairInCharge = null;
+          let midRate = null; // 1 spend = midRate charge
+          if(spendCcy === chargeCcy){
+            fairInCharge = spendAmt;
+            midRate = 1;
+          } else if(rates && rates.rates){
+            fairInCharge = convert(spendAmt, spendCcy, chargeCcy);
+            // rate: charge per 1 spend
+            midRate = convert(1, spendCcy, chargeCcy);
+          }
+
+          if(fairInCharge == null || midRate == null){
+            clear('缺少汇率：请先加载汇率，或换成已支持的币种');
+            return;
+          }
+          if(fairInCharge === 0){
+            clear('消费金额换算为 0，无法计算');
+            return;
+          }
+
+          const loss = chargeAmt - fairInCharge;
+          const pct = (loss / fairInCharge) * 100;
+
+          fairEl.textContent = `${money(fairInCharge)} ${chargeCcy}`;
+          lossAmtEl.textContent = `${money(loss)} ${chargeCcy}`;
+          lossPctEl.textContent = fmtPct(pct);
+          payTotalEl.textContent = `${money(chargeAmt)} ${chargeCcy}`;
+          // show both directions for clarity
+          const inv = midRate ? (1 / midRate) : null;
+          midEl.textContent = midRate === 1
+            ? `1 ${spendCcy} = 1 ${chargeCcy}`
+            : `1 ${spendCcy} = ${money(midRate)} ${chargeCcy}` + (inv != null ? `  ·  1 ${chargeCcy} = ${money(inv)} ${spendCcy}` : '');
+
+          noteEl.textContent = loss >= 0
+            ? `消费 ${money(spendAmt)} ${spendCcy} 按中间价应扣 ${money(fairInCharge)} ${chargeCcy}，实扣 ${money(chargeAmt)} ${chargeCcy}，多扣 ${money(loss)} ${chargeCcy}（${fmtPct(pct)}）`
+            : `消费 ${money(spendAmt)} ${spendCcy} 按中间价应扣 ${money(fairInCharge)} ${chargeCcy}，实扣 ${money(chargeAmt)} ${chargeCcy}，少扣 ${money(Math.abs(loss))} ${chargeCcy}`;
+
+          lossAmtEl.classList.toggle('pos', loss > 0);
+          lossAmtEl.classList.toggle('neg', loss < 0);
+        } else {
+          // 百分比模式：我应付(币种A) + 实际支付币种B + 损耗%
+          // 先把应付按中间价换成实际支付币种，再套百分比
+          const payCcy = feePayCombo.get();
+          const actualCcy = feeActualPayCombo.get();
+          const pay = parseFloat(document.getElementById('feePay').value);
+          const pct = parseFloat(document.getElementById('feePct').value);
+          if(!isFinite(pay) || !isFinite(pct)){
+            clear('填写应付金额与损耗百分比后自动计算');
+            return;
+          }
+
+          let fairInActual = null;
+          let midRate = null; // 1 payCcy = midRate actualCcy
+          if(payCcy === actualCcy){
+            fairInActual = pay;
+            midRate = 1;
+          } else if(rates && rates.rates){
+            fairInActual = convert(pay, payCcy, actualCcy);
+            midRate = convert(1, payCcy, actualCcy);
+          }
+
+          if(fairInActual == null || midRate == null){
+            clear('缺少汇率：请先加载汇率，或换成已支持的币种');
+            return;
+          }
+
+          const loss = fairInActual * (pct / 100);
+          const total = fairInActual + loss;
+          const inv = midRate ? (1 / midRate) : null;
+
+          fairEl.textContent = `${money(fairInActual)} ${actualCcy}`;
+          lossAmtEl.textContent = `${money(loss)} ${actualCcy}`;
+          lossPctEl.textContent = fmtPct(pct);
+          payTotalEl.textContent = `${money(total)} ${actualCcy}`;
+          midEl.textContent = midRate === 1
+            ? `1 ${payCcy} = 1 ${actualCcy}`
+            : `1 ${payCcy} = ${money(midRate)} ${actualCcy}` + (inv != null ? `  ·  1 ${actualCcy} = ${money(inv)} ${payCcy}` : '');
+
+          noteEl.textContent = payCcy === actualCcy
+            ? `应付 ${money(pay)} ${payCcy} + 损耗 ${money(loss)} ${actualCcy}（${fmtPct(pct)}） = 实付 ${money(total)} ${actualCcy}`
+            : `应付 ${money(pay)} ${payCcy} ≈ 中间价 ${money(fairInActual)} ${actualCcy}，加损耗 ${money(loss)} ${actualCcy}（${fmtPct(pct)}）= 实付 ${money(total)} ${actualCcy}`;
+
+          lossAmtEl.classList.toggle('pos', loss > 0);
+          lossAmtEl.classList.toggle('neg', loss < 0);
+        }
+      }
+
+      subnav.querySelectorAll('.tab').forEach(btn => {
+        btn.addEventListener('click', () => setView(btn.dataset.moneyView));
+      });
+      document.querySelectorAll('#feeModeTabs .tab').forEach(btn => {
+        btn.addEventListener('click', () => setFeeMode(btn.dataset.feeMode));
+      });
+      ['feeShould','feeActual','feePay','feePct'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.addEventListener('input', calcFee);
+      });
+      document.getElementById('feeRefreshRates')?.addEventListener('click', () => {
+        document.getElementById('feeRateSource').textContent = '刷新中…';
+        fetchRates(comboFrom.get() || feeChargeCombo.get() || 'USD').then(() => {
+          syncFeeCombos();
+        });
+      });
+      document.querySelectorAll('#feeProviderTabs .tab').forEach(btn => {
+        btn.addEventListener('click', () => setFeeProvider(btn.dataset.feeProvider));
+      });
+
+      // Recompute when main rates update
+      const _applyData = applyData;
+      // wrap applyData if not already - use event-ish by patching after definition is hard;
+      // instead poll-free: hook into existing applyData by replacing reference below isn't possible.
+      // We'll monkey-patch window-level hook:
+      const origApply = applyData;
+      // rebind name in outer scope via assignment on outer applyData — done after function exists.
+      // Simpler: override by assigning to outer variable through eval scope — same IIFE, so:
+      // Actually applyData is const-like function decl in outer IIFE — we can wrap:
+      // Not reassignable if function declaration... it's `function applyData` or const?
+      // Check: use Mutation? Easiest path: call syncFeeCombos from setInterval when on fee view — no.
+      // Patch: store hook
+      window.__fxOnRates = function(){ try{ syncFeeCombos(); }catch(_){ } };
+
+      setFeeMode(feeMode);
+      const savedView = localStorage.getItem('fx.moneyView') || 'fx';
+      setView(savedView === 'fee' ? 'fee' : 'fx');
+      syncFeeCombos();
+      calcFee();
+    })();
+
   })();
   </script>
-    </main>
+  </main>
   </div>
+
 </body>
 </html>
