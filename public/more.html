@@ -5,12 +5,13 @@
   <title>更多工具</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="UUID 生成 / 密码生成 / 时间戳 / 哈希计算 / 二维码生成 等常用小工具。">
-  <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
-  <link rel="stylesheet" href="assets/css/style.css">
-  <script src="assets/js/otpauth.umd.min.js"></script>
-  <script src="assets/js/qrcode.min.js"></script>
-  <script src="assets/js/jsQR.js"></script>
-  <script src="assets/js/common.js"></script>
+  <link rel="icon" type="image/svg+xml" href="/assets/img/favicon.svg">
+  <link rel="stylesheet" href="/assets/css/style.css">
+  <link rel="stylesheet" href="/assets/css/ui-v4.css">
+  <script src="/assets/js/otpauth.umd.min.js"></script>
+  <script src="/assets/js/qrcode.min.js"></script>
+  <script src="/assets/js/jsQR.js"></script>
+  <script src="/assets/js/common.js"></script>
 </head>
 <body>
   <div class="layout">
@@ -247,12 +248,14 @@
       if(isNaN(n)){ $('#ts-out').textContent = '非数字'; return; }
       if(v.length <= 10) n = n * 1000;
       const d = new Date(n);
+      if(Number.isNaN(d.getTime())){ $('#ts-out').textContent = '无效时间戳'; return; }
       $('#ts-out').innerHTML = `本地时间 <b>${d.toLocaleString()}</b><br>UTC <b>${d.toUTCString()}</b><br>ISO <b>${d.toISOString()}</b>`;
     });
     $('#dt-in').addEventListener('input', () => {
       const v = $('#dt-in').value;
       if(!v){ $('#dt-out').textContent = ''; return; }
       const t = new Date(v).getTime();
+      if(Number.isNaN(t)){ $('#dt-out').textContent = '无效日期'; return; }
       $('#dt-out').innerHTML = `秒 <b>${Math.floor(t/1000)}</b> · 毫秒 <b>${t}</b>`;
     });
 
@@ -470,6 +473,10 @@
       const toBase   = Math.max(2, Math.min(36, parseInt($('#num-to-base').value, 10) || 10));
       const val = $('#num-from-val').value.trim();
       if(!val){ window.toast('请输入数字'); return; }
+      const signless = val.replace(/^[+-]/, '');
+      const digits = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'.slice(0, fromBase);
+      const valid = signless.length > 0 && [...signless.toUpperCase()].every(ch => digits.includes(ch));
+      if(!valid){ window.toast('输入数字与所选进制不匹配'); return; }
       const n = parseInt(val, fromBase);
       if(!isFinite(n)){ window.toast('输入数字与所选进制不匹配'); return; }
       $('#num-to-val').value = n.toString(toBase).toUpperCase();

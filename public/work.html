@@ -5,12 +5,13 @@
   <title>图片处理</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="纯前端图片处理：压缩、缩放、格式转换（JPG / PNG / WEBP）、Base64。">
-  <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
-  <link rel="stylesheet" href="assets/css/style.css">
-  <script src="assets/js/otpauth.umd.min.js"></script>
-  <script src="assets/js/qrcode.min.js"></script>
-  <script src="assets/js/jsQR.js"></script>
-  <script src="assets/js/common.js"></script>
+  <link rel="icon" type="image/svg+xml" href="/assets/img/favicon.svg">
+  <link rel="stylesheet" href="/assets/css/style.css">
+  <link rel="stylesheet" href="/assets/css/ui-v4.css">
+  <script src="/assets/js/otpauth.umd.min.js"></script>
+  <script src="/assets/js/qrcode.min.js"></script>
+  <script src="/assets/js/jsQR.js"></script>
+  <script src="/assets/js/common.js"></script>
 </head>
 <body>
   <div class="layout">
@@ -102,6 +103,7 @@
         $('#info').innerHTML = `
           <span class="label">原始</span><span class="value">${img.naturalWidth}×${img.naturalHeight} · ${kbBefore} KB</span>
           <span class="label">输出</span><span class="value">${w}×${h} · ${kbAfter} KB（${ratio}%）</span>`;
+        if(cv.dataset.outBlobUrl) URL.revokeObjectURL(cv.dataset.outBlobUrl);
         cv.dataset.outType = fmt;
         cv.dataset.outName = 'image_' + Date.now() + '.' + (fmt === 'image/jpeg' ? 'jpg' : fmt.split('/')[1]);
         cv.dataset.outBlobUrl = URL.createObjectURL(blob);
@@ -133,6 +135,9 @@
     }
 
     bindFiles();
+    (window.__pageOn || ((t,e,f)=>t.addEventListener(e,f)))(window, 'app:page-cleanup', () => {
+      if(cv.dataset.outBlobUrl){ URL.revokeObjectURL(cv.dataset.outBlobUrl); delete cv.dataset.outBlobUrl; }
+    });
     $('#apply').addEventListener('click', render);
     $('#download').addEventListener('click', () => {
       if(!cv.dataset.outBlobUrl){ return window.toast('请先处理图片'); }

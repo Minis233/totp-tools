@@ -6,12 +6,13 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="开源 2FA / TOTP 多账号管理器，支持扫码导入、相册导入、Base32 手动添加。">
-  <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
-  <link rel="stylesheet" href="assets/css/style.css">
-  <script src="assets/js/otpauth.umd.min.js"></script>
-  <script src="assets/js/qrcode.min.js"></script>
-  <script src="assets/js/jsQR.js"></script>
-  <script src="assets/js/common.js"></script>
+  <link rel="icon" type="image/svg+xml" href="/assets/img/favicon.svg">
+  <link rel="stylesheet" href="/assets/css/style.css">
+  <link rel="stylesheet" href="/assets/css/ui-v4.css">
+  <script src="/assets/js/otpauth.umd.min.js"></script>
+  <script src="/assets/js/qrcode.min.js"></script>
+  <script src="/assets/js/jsQR.js"></script>
+  <script src="/assets/js/common.js"></script>
 </head>
 <body>
   <div class="layout">
@@ -65,7 +66,10 @@
 
     // -------- state --------
     let accounts = [];
-    try { accounts = JSON.parse(STORAGE.getItem(LS_KEY) || '[]'); } catch(e){ accounts = []; }
+    try {
+      const stored = JSON.parse(STORAGE.getItem(LS_KEY) || '[]');
+      accounts = Array.isArray(stored) ? stored.filter(a => a && typeof a === 'object' && typeof a.secret === 'string') : [];
+    } catch(e){ accounts = []; }
     const save = () => STORAGE.setItem(LS_KEY, JSON.stringify(accounts));
 
     function uid(){ return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
@@ -111,27 +115,30 @@
       );
     }
 
+    function renderEmpty(icon, message){
+      const panel = document.createElement('div');
+      panel.className = 'panel';
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      const ico = document.createElement('div');
+      ico.className = 'ico';
+      ico.textContent = icon;
+      const text = document.createElement('div');
+      text.textContent = message;
+      empty.append(ico, text);
+      panel.appendChild(empty);
+      list.appendChild(panel);
+    }
+
     function render(){
       list.innerHTML = '';
       const visible = filteredAccounts();
       if(!accounts.length){
-        list.innerHTML = `
-          <div class="panel">
-            <div class="empty-state">
-              <div class="ico">🔐</div>
-              <div>暂无账号，添加或扫码导入一个试试～</div>
-            </div>
-          </div>`;
+        renderEmpty('＋', '暂无账号，添加或扫码导入一个试试。');
         return;
       }
       if(!visible.length){
-        list.innerHTML = `
-          <div class="panel">
-            <div class="empty-state">
-              <div class="ico">🔍</div>
-              <div>没有匹配「${searchQuery}」的账号</div>
-            </div>
-          </div>`;
+        renderEmpty('⌕', `没有匹配「${searchQuery}」的账号`);
         return;
       }
       for(const acc of visible){
@@ -328,6 +335,9 @@
         const algorithm = (u.searchParams.get('algorithm') || 'SHA1').toUpperCase();
         const digits = parseInt(u.searchParams.get('digits') || '6', 10);
         const period = parseInt(u.searchParams.get('period') || '30', 10);
+        if(!['SHA1','SHA256','SHA512'].includes(algorithm)) throw new Error('不支持的算法');
+        if(![6,7,8].includes(digits)) throw new Error('验证码位数必须为 6–8');
+        if(!Number.isInteger(period) || period < 5 || period > 300) throw new Error('刷新周期无效');
         return { remark: remark || issuer || '未命名', issuer, secret, algorithm, digits, period };
       }catch(e){
         window.toast('二维码无效：' + e.message);
@@ -379,6 +389,7 @@
       }
     });
     $('#btn-stop').addEventListener('click', stopScan);
+    (window.__pageOn || ((t,e,f)=>t.addEventListener(e,f)))(window, 'app:page-cleanup', stopScan);
     function stopScan(){
       if(scanRAF){ cancelAnimationFrame(scanRAF); scanRAF = null; }
       if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }

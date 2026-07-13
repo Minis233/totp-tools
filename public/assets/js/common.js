@@ -3,17 +3,18 @@
   'use strict';
 
   const NAV = [
-    { href: 'index.html',  label: '2FA验证',  ico: '🔑' },
-    { href: 'note.html',   label: '文本处理',  ico: '✎'  },
-    { href: 'work.html',   label: '图片处理',  ico: '🖼' },
-    { href: 'money.html',  label: '汇率换算',  ico: '↔'  },
-    { href: 'more.html',   label: '更多工具',  ico: '⋯'  },
+    { page: 'index.html', href: '/index.html', label: '2FA 验证',  ico: '01' },
+    { page: 'note.html',  href: '/note.html',  label: '文本处理',  ico: '02' },
+    { page: 'work.html',  href: '/work.html',  label: '图片处理',  ico: '03' },
+    { page: 'money.html', href: '/money.html', label: '汇率换算',  ico: '04' },
+    { page: 'more.html',  href: '/more.html',  label: '更多工具',  ico: '05' },
   ];
-  const PAGE_SET = new Set(NAV.map(n => n.href));
+  const PAGE_SET = new Set(NAV.map(n => n.page));
 
   function currentPage(){
+    if(/^\/2fa\/[A-Za-z2-7]+\/?$/i.test(location.pathname)) return 'index.html';
     const p = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
-    return p === '' ? 'index.html' : p;
+    return PAGE_SET.has(p) ? p : 'index.html';
   }
 
   function renderSidebar(){
@@ -25,8 +26,8 @@
       <div class="brand"><span class="brand-dot"></span><span>在线工具</span></div>
       <nav>
         ${NAV.map(n => {
-          const isActive = n.href === active;
-          return `<a class="${isActive?'active':''}" href="${n.href}" data-spa><span class="ico" aria-hidden="true">${n.ico}</span>${n.label}</a>`;
+          const isActive = n.page === active;
+          return `<a class="${isActive?'active':''}" href="${n.href}" data-page="${n.page}" data-spa><span class="ico" aria-hidden="true">${n.ico}</span><span>${n.label}</span></a>`;
         }).join('')}
       </nav>
       <div class="side-tools">
@@ -122,6 +123,7 @@
     tracked.listeners.push({ target, type, fn, opts });
   };
   function cleanupPageState(){
+    try { window.dispatchEvent(new CustomEvent('app:page-cleanup')); } catch(_){}
     for(const id of tracked.intervals) _ci.call(window, id);
     tracked.intervals.clear();
     for(const { target, type, fn, opts } of tracked.listeners){
@@ -171,14 +173,14 @@
     return { main, title };
   }
 
-  async function navigateTo(href, push){
-    if(!PAGE_SET.has(href)) return false;
-    if(href === loadedHref && !inflight) return true;
+  async function navigateTo(page, push){
+    if(!PAGE_SET.has(page)) return false;
+    if(page === loadedHref && !inflight) return true;
 
     const myToken = inflight = Symbol('nav');
 
     let html;
-    try { html = await fetchPage(href); }
+    try { html = await fetchPage('/' + page); }
     catch(e){ window.toast('加载失败：' + e.message); return false; }
     if(inflight !== myToken) return false;
 
@@ -192,16 +194,16 @@
     oldMain.replaceWith(newMain);
     document.title = title;
 
-    if(push) history.pushState({ spa: true, href }, title, href);
+    if(push) history.pushState({ spa: true, page }, title, '/' + page);
 
     document.querySelectorAll('.sidebar nav a').forEach(a => a.classList.remove('active'));
-    const link = document.querySelector('.sidebar nav a[href="' + href + '"]');
+    const link = document.querySelector('.sidebar nav a[data-page="' + page + '"]');
     if(link) link.classList.add('active');
 
     runScripts(newMain);
 
     window.scrollTo({ top: 0 });
-    loadedHref = href;
+    loadedHref = page;
     inflight = null;
     return true;
   }
@@ -211,14 +213,14 @@
       const a = e.target.closest('a[data-spa]');
       if(!a) return;
       if(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-      const href = a.getAttribute('href');
-      if(!href || !PAGE_SET.has(href)) return;
+      const page = a.dataset.page;
+      if(!page || !PAGE_SET.has(page)) return;
       e.preventDefault();
-      navigateTo(href, true);
+      navigateTo(page, true);
     });
     window.addEventListener('popstate', () => {
-      const href = currentPage();
-      if(PAGE_SET.has(href)) navigateTo(href, false);
+      const page = currentPage();
+      if(PAGE_SET.has(page)) navigateTo(page, false);
     });
   }
 

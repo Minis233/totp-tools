@@ -5,12 +5,13 @@
   <title>汇率换算</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="实时汇率换算，数据来自开源免费汇率 API。">
-  <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
-  <link rel="stylesheet" href="assets/css/style.css">
-  <script src="assets/js/otpauth.umd.min.js"></script>
-  <script src="assets/js/qrcode.min.js"></script>
-  <script src="assets/js/jsQR.js"></script>
-  <script src="assets/js/common.js"></script>
+  <link rel="icon" type="image/svg+xml" href="/assets/img/favicon.svg">
+  <link rel="stylesheet" href="/assets/css/style.css">
+  <link rel="stylesheet" href="/assets/css/ui-v4.css">
+  <script src="/assets/js/otpauth.umd.min.js"></script>
+  <script src="/assets/js/qrcode.min.js"></script>
+  <script src="/assets/js/jsQR.js"></script>
+  <script src="/assets/js/common.js"></script>
 </head>
 <body>
   <div class="layout">
@@ -88,6 +89,7 @@
         $('#status').textContent = '加载中…';
         const url = `https://api.frankfurter.dev/v1/latest?base=${base}`;
         const resp = await fetch(url);
+        if(!resp.ok) throw new Error('HTTP ' + resp.status);
         const data = await resp.json();
         if(!data || !data.rates) throw new Error('返回数据异常');
         // ensure base itself = 1
@@ -152,21 +154,14 @@
 
     $('#amtFrom').addEventListener('input', () => compute(false));
     $('#amtTo').addEventListener('input', () => compute(true));
-    $('#curFrom').addEventListener('change', () => {
-      const f = $('#curFrom').value;
-      // refetch if not already covered
-      if(!rates || rates.rates[f] === undefined) fetchRates(f);
-      else compute(false);
-    });
+    $('#curFrom').addEventListener('change', () => fetchRates($('#curFrom').value));
     $('#curTo').addEventListener('change', () => compute(false));
     $('#swap').addEventListener('click', () => {
       const f = $('#curFrom').value, t = $('#curTo').value;
       $('#curFrom').value = t; $('#curTo').value = f;
       const af = $('#amtFrom').value;
       $('#amtFrom').value = $('#amtTo').value; $('#amtTo').value = af;
-      // refetch from current base if needed
-      if(!rates || rates.rates[t] === undefined) fetchRates(t);
-      else { activeBase = t; renderTable(); compute(false); $('#baseLabel').textContent = t; }
+      fetchRates(t);
     });
     $('#refresh').addEventListener('click', () => fetchRates($('#curFrom').value));
 
