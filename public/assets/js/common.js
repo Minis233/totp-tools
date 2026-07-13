@@ -13,8 +13,14 @@
 
   function currentPage(){
     if(/^\/2fa\/[A-Za-z2-7]+\/?$/i.test(location.pathname)) return 'index.html';
-    const p = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
-    return PAGE_SET.has(p) ? p : 'index.html';
+    const raw = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
+    const aliases = {
+      '': 'index.html', 'index': 'index.html',
+      'note': 'note.html', 'work': 'work.html',
+      'money': 'money.html', 'more': 'more.html'
+    };
+    const page = aliases[raw] || raw;
+    return PAGE_SET.has(page) ? page : 'index.html';
   }
 
   function renderSidebar(){
@@ -170,7 +176,41 @@
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const main = doc.querySelector('main');
     const title = (doc.querySelector('title') || {}).textContent || document.title;
-    return { main, title };
+    const styles = Array.from(doc.querySelectorAll('head link[rel="stylesheet"]'))
+      .map(link => link.getAttribute('href')).filter(Boolean);
+    return { main, title, styles };
+  }
+
+  function markInitialPageStyles(){
+    document.querySelectorAll('head link[rel="stylesheet"]').forEach(link => {
+      let path = '';
+      try { path = new URL(link.href, location.href).pathname; } catch(_){}
+      if(path && !/\/(style|ui-v4)\.css$/i.test(path)) link.dataset.pageStyle = 'true';
+    });
+  }
+
+  async function syncPageStyles(styles){
+    document.querySelectorAll('head link[data-page-style]').forEach(link => link.remove());
+    const loaded = new Set(Array.from(document.styleSheets).map(sheet => {
+      try { return sheet.href ? new URL(sheet.href, location.href).pathname : ''; }
+      catch(_) { return ''; }
+    }));
+    const pending = [];
+    for(const href of styles){
+      let path = '';
+      try { path = new URL(href, location.href).pathname; } catch(_){}
+      if(!path || loaded.has(path) || /\/(style|ui-v4)\.css$/i.test(path)) continue;
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      link.dataset.pageStyle = 'true';
+      pending.push(new Promise(resolve => {
+        link.onload = resolve;
+        link.onerror = resolve;
+      }));
+      document.head.appendChild(link);
+    }
+    await Promise.all(pending);
   }
 
   async function navigateTo(page, push){
@@ -184,10 +224,11 @@
     catch(e){ window.toast('加载失败：' + e.message); return false; }
     if(inflight !== myToken) return false;
 
-    const { main, title } = extractFromHtml(html);
+    const { main, title, styles } = extractFromHtml(html);
     if(!main){ window.toast('页面解析失败'); return false; }
 
     cleanupPageState();
+    await syncPageStyles(styles);
 
     const oldMain = document.querySelector('main');
     const newMain = main.cloneNode(true);
@@ -226,6 +267,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     loadedHref = currentPage();
+    markInitialPageStyles();
     renderSidebar();
     bindRouter();
   });
