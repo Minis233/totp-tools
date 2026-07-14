@@ -465,11 +465,15 @@
               .catch(() => ({ ok: false, data: {} })));
           }
           const pages = await Promise.all(pageJobs);
+          const failedPages = pages.filter(result => !result.ok).length;
           for(const result of pages){
             if(!result.ok) continue;
             Object.assign(rates, result.data.rates || {});
             rates[base] = 1;
             if(result.data.date) date = result.data.date;
+          }
+          if(failedPages){
+            throw new Error(`Wise 有 ${failedPages} 页暂时不可用`);
           }
           if(typeof onPartial === 'function' && pages.length){
             onPartial({ base, date, rates: Object.assign({}, rates), source: `Wise mid-market · ${Object.keys(rates).length} 种（已补全）`, partial: true });
@@ -817,6 +821,13 @@
     }
 
     function applyData(data){
+      if(provider === 'wise' && rates?.rates && data?.rates){
+        const oldCount = Object.keys(rates.rates).length;
+        const newCount = Object.keys(data.rates).length;
+        if(oldCount > newCount){
+          data = Object.assign({}, data, { rates: Object.assign({}, data.rates, rates.rates), source: `${data.source || 'Wise mid-market'} · 保留缓存补全` });
+        }
+      }
       rates = data;
       activeBase = data.base;
       const prevFrom = comboFrom.get();

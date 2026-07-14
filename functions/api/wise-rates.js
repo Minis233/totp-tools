@@ -12,6 +12,14 @@ export async function onRequestGet(context) {
     ? [...new Set(targetsParam.split(',').map(x => x.trim().toUpperCase()).filter(Boolean))]
     : WISE_CODES.filter(code => code !== source);
   const targets = targetsParam ? allTargets : allTargets.slice(page * size, (page + 1) * size);
+  const cache = context.env?.WISE_CACHE || caches.default;
+  const cacheUrl = new URL(url.origin + url.pathname);
+  cacheUrl.searchParams.set('source', source);
+  if (targetsParam) cacheUrl.searchParams.set('targets', allTargets.join(','));
+  else { cacheUrl.searchParams.set('page', String(page)); cacheUrl.searchParams.set('size', String(size)); }
+  const cacheRequest = new Request(cacheUrl.toString(), { method: 'GET' });
+  const cached = await cache.match(cacheRequest);
+  if (cached) return cached;
   const rates = { [source]: 1 };
 
   async function fetchOne(target) {
@@ -19,7 +27,12 @@ export async function onRequestGet(context) {
     const endpoint = `https://wise.com/rates/live?source=${encodeURIComponent(source)}&target=${encodeURIComponent(target)}`;
     let lastStatus = 0;
     for (let attempt = 0; attempt < 2; attempt++) {
-      const response = await fetch(endpoint, { headers: { accept: 'application/json', 'user-agent': 'Mozilla/5.0' } });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6500);
+      let response;
+      try {
+        response = await fetch(endpoint, { headers: { accept: 'application/json', 'user-agent': 'Mozilla/5.0' }, signal: controller.signal });
+      } finally { clearTimeout(timer); }
       lastStatus = response.status;
       if (response.ok) {
         const data = await response.json();
@@ -58,11 +71,13 @@ export async function onRequestGet(context) {
   }
 
   const totalPages = targetsParam ? null : Math.ceil(allTargets.length / size);
-  return Response.json({
+  const response = Response.json({
     provider: 'wise', base: source, date: Date.now(), rates,
     count: Object.keys(rates).length, matched,
     page, size, totalTargets: targetsParam ? null : allTargets.length,
     totalPages, hasMore: targetsParam ? false : page + 1 < totalPages,
     pageTargets: targets.length
-  }, { headers: { 'cache-control': 'public, max-age=300' } });
+  }, { headers: { 'cache-control': 'public, max-age=900, stale-while-revalidate=86400' } });
+  context.waitUntil(cache.put(cacheRequest, response.clone()));
+  return response;
 }
