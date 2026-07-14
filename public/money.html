@@ -8,7 +8,7 @@
   <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/css/style.css">
   <link rel="stylesheet" href="/assets/css/ui-v4.css">
-  <link rel="stylesheet" href="/assets/css/money-v4.css?v=20260714b">
+  <link rel="stylesheet" href="/assets/css/money-v4.css?v=20260714c">
   <script src="/assets/js/common.js?v=20260714b"></script>
 </head>
 <body>
@@ -191,6 +191,7 @@
       USD: "美元",
       EUR: "欧元",
       CNY: "人民币",
+      CNH: "离岸人民币",
       JPY: "日元",
       GBP: "英镑",
       HKD: "港币",
@@ -321,7 +322,8 @@
       SCR: "塞舌尔卢比",
       SDG: "苏丹镑",
       SHP: "圣赫勒拿镑",
-      SLE: "塞拉利昂利昂",
+      SLE: "塞拉利昂新利昂",
+      SLL: "塞拉利昂旧利昂",
       SOS: "索马里先令",
       SRD: "苏里南元",
       SSP: "南苏丹镑",
@@ -349,6 +351,7 @@
       XPF: "太平洋法郎",
       YER: "也门里亚尔",
       ZMW: "赞比亚克瓦查",
+      ZWG: "津巴布韦金",
       ZWL: "津巴布韦元"
     };
 
@@ -363,7 +366,7 @@
     }
 
     // Priority list only for Wise progressive first paint (not for UI order)
-    const WISE_PRIORITY = ["USD","EUR","CNY","JPY","GBP","HKD","TWD","KRW","SGD","AUD","CAD","CHF","THB","MYR","IDR","PHP","VND","INR","RUB","BRL","MXN","NZD","SEK","NOK","DKK","PLN","TRY","AED","SAR","ILS","CZK","HUF","RON","ZAR","CLP","ARS","COP","PEN","EGP","NGN","PKR","BDT","UAH"];
+    const WISE_PRIORITY = ["USD","EUR","CNY","CNH","JPY","GBP","HKD","TWD","KRW","SGD","AUD","CAD","CHF","THB","MYR","IDR","PHP","VND","INR","IRR","RUB","BRL","MXN","NZD","SEK","NOK","DKK","PLN","TRY","AED","SAR","ILS","CZK","HUF","RON","ZAR","SLE","SLL","XCG","ZWG","ZWL","CLP","ARS","COP","PEN","EGP","NGN","PKR","BDT","UAH"];
 
     const PROVIDERS = {
       frankfurter: {
@@ -442,7 +445,7 @@
             .filter(Boolean).map(c => String(c).toUpperCase());
           const priority = [...new Set([...preferred, ...WISE_PRIORITY])]
             .filter(c => c && c !== base)
-            .slice(0, 36);
+            .slice(0, 14);
           const pUrl = `/api/wise-rates?source=${encodeURIComponent(base)}&targets=${priority.join(',')}`;
           const pResp = await fetch(pUrl, { cache: 'no-store' });
           const pData = await pResp.json().catch(() => ({}));
@@ -455,7 +458,7 @@
           }
           let page = 0, totalPages = 1;
           while(page < totalPages && page < 12){
-            const url = `/api/wise-rates?source=${encodeURIComponent(base)}&page=${page}&size=40`;
+            const url = `/api/wise-rates?source=${encodeURIComponent(base)}&page=${page}&size=50`;
             const resp = await fetch(url, { cache: 'no-store' });
             const data = await resp.json().catch(() => ({}));
             if(!resp.ok) break;
@@ -480,6 +483,7 @@
     let rates = null;
     let activeBase = 'USD';
     let loading = false;
+    let requestSeq = 0;
     let rateFilter = '';
     let lastEdit = 'from'; // which amount field user last edited
 
@@ -811,6 +815,8 @@
 
     async function fetchRates(base, opts = {}){
       const silent = !!opts.silent;
+      const selectedProvider = provider;
+      const seq = ++requestSeq;
       if(loading && !opts.force) return;
       loading = true;
       if(!silent){
@@ -824,16 +830,19 @@
       }
       updateCountdownUI();
       try{
-        const onPartial = (provider === 'wise')
+        const onPartial = (selectedProvider === 'wise')
           ? (partial) => {
+              if(seq !== requestSeq || selectedProvider !== provider) return;
               if(loading){ loading = false; updateCountdownUI(); }
               applyData(partial);
             }
           : null;
-        const data = await PROVIDERS[provider].fetch(base, { onPartial });
+        const data = await PROVIDERS[selectedProvider].fetch(base, { onPartial });
+        if(seq !== requestSeq || selectedProvider !== provider) return;
         applyData(data);
         if(autoEnabled) leftSec = autoSec;
       }catch(e){
+        if(seq !== requestSeq || selectedProvider !== provider) return;
         if(!rates){
           $('#status').textContent = '加载失败：' + (e.message || e);
           $('#rateTable').innerHTML = '';
@@ -841,8 +850,10 @@
           $('#status').textContent = '刷新失败：' + (e.message || e) + '（仍显示上次数据）';
         }
       }finally{
-        loading = false;
-        updateCountdownUI();
+        if(seq === requestSeq){
+          loading = false;
+          updateCountdownUI();
+        }
       }
     }
 
@@ -887,6 +898,8 @@
         const p = btn.dataset.provider;
         if(!PROVIDERS[p] || p === provider) return;
         provider = p;
+        requestSeq += 1;
+        loading = false;
         localStorage.setItem('fx.provider', provider);
         setProviderUI();
         // Instant paint from provider cache (Wise especially)
@@ -1029,6 +1042,8 @@
         }
         // reuse main provider switch path so cache/paint stay consistent
         provider = p;
+        requestSeq += 1;
+        loading = false;
         localStorage.setItem('fx.provider', provider);
         // keep fx page tabs in sync if present
         document.querySelectorAll('#providerTabs .tab').forEach(btn => {
