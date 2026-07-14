@@ -84,3 +84,44 @@
 - 预载、读取、扫描和写入缓存均过滤少于 4 种的污染缓存。
 
 该问题是在多轮压力测试中发现的严重间歇性问题。
+
+## 第二轮：全量源码审查 + 修复 + 暴力/模糊测试（2026-07-14）
+
+### 源码审查发现的 9 个问题（本轮全部修复）
+
+正确性（中等）：
+1. 进制转换超过 2^53 精度丢失（more.html）——改用 BigInt 任意精度，超范围输入被拒绝。
+2. Hex 解码 `replace(/0x/gi,'')` 会删除中间的 `0x`/`0X` 子串（note.html）——改为仅去除每个 token 的开头前缀。
+3. 极小金额换算被 `toFixed(6)` 舍成 0（money.html）——新增 `fmtAmount`，小值保留有效数字。
+
+体验（轻微）：
+4. 极大金额显示科学计数法（money.html）——`fmtAmount` 去除 sci-notation。
+5. 颜色 RGB/HSL 越界与负号静默钳制/丢失（more.html）——加范围校验，越界提示并拒绝。
+6. 标题大小写对非 ASCII 首字母无效（note.html）——改用 Unicode 感知正则 + `toLocaleUpperCase`。
+7. 文本排序为字典序，数字不符直觉（note.html）——`localeCompare(..., {numeric:true})`。
+8. 密码长度小于勾选组数时静默变长（属最小值钳制，保留但已知）。
+9. money.html `initFeeCalc` 遗留死注释/未用变量——已清理。
+
+### 暴力 / 模糊测试
+
+- 文本处理 20000 次随机输入模糊：0 次非预期异常。
+- 进制转换 / fmtAmount / 卡损耗各 50000 次随机输入模糊：0 次非预期异常。
+- More 工具（UUID/密码/随机色/哈希/tab）高频点击：0 错误。
+- SPA 高频随机切页 400 次：**发现并修复 1 个新 bug**（见下），修复后 0 错误。
+- 汇率来源快速切换 300 次：0 错误，最终状态一致，币种不缩水。
+- localStorage 注入垃圾数据后重载：0 崩溃，provider/autoSec 正确降级。
+- 2FA 注入 1000 账号：0 错误，渲染与验证码正常（大数据量下搜索约 500ms，仅慢不崩）。
+- 2FA 边界密钥（过短/非法字符/过长/emoji/含空格/小写）：全部正确校验。
+- 文本 10000 行全操作：0 错误，最慢 dedupe≈490ms。
+- JWT 畸形与 XSS 输入：`<img>`/`<script>`/`</pre>` 全部 HTML 实体转义，无 DOM 注入。
+
+### 本轮发现并修复的新 bug
+
+**SPA 切页遗留异步回调触达已卸载 DOM**（money.html）：快速离开汇率页时，在途的 `fetch` promise 仍会 resolve，回调里 `$('#status').textContent` 因 `<main>` 已替换而为 null，产生 `unhandledrejection`。400 次高频切页触发 30 次。
+修复：新增 `disposed` 标志监听 `app:page-cleanup`，并在 `applyData`、`updateCountdownUI`、`syncFeeCombos` 入口加 disposed/null 守卫，同时 cleanup 时递增 `requestSeq` 使在途请求作废。修复后重测 0 错误。
+
+### 已知未修（非缺陷，属特性/降级）
+
+- 大数据量（1000 账号）搜索每次全量重渲染，约 500ms，仅性能非崩溃。
+- `fx.from` 被污染成非法币种码时回退到列表首项而非 USD，仍可正常换算。
+- 密码长度下限钳制为 4，请求更小值会静默取 4。

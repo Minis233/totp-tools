@@ -500,6 +500,10 @@
     if(![10,15,30,60,120,300].includes(autoSec)) autoSec = 30;
     let leftSec = autoSec;
     let tickTimer = null;
+    // When the SPA router swaps <main> out, in-flight fetch/promises may still
+    // resolve and try to touch DOM nodes that no longer exist. Guard against it.
+    let disposed = false;
+    (window.__pageOn || ((t,e,f)=>t.addEventListener(e,f)))(window, 'app:page-cleanup', () => { disposed = true; requestSeq += 1; });
 
     // ---------- Searchable currency combobox ----------
     function createCombo(root, initial, onChange){
@@ -748,20 +752,36 @@
       return (amount / fromRate) * toRate;
     }
 
+    // Format a converted amount without losing tiny values or emitting sci-notation.
+    function fmtAmount(v){
+      if(!isFinite(v)) return '';
+      if(v === 0) return '0';
+      const abs = Math.abs(v);
+      let out;
+      if(abs >= 1e15 || abs < 1e-6){
+        // very large / very small: use significant digits, strip sci-notation
+        out = v.toPrecision(8);
+        if(/e/i.test(out)) out = Number(v).toLocaleString('en-US', { maximumFractionDigits: 20, useGrouping: false });
+      } else {
+        out = String(+v.toFixed(6));
+      }
+      return out;
+    }
+
     // reverse=false: from → to; reverse=true: to → from
     function compute(reverse){
       if(!rates) return;
       const from = comboFrom.get(), to = comboTo.get();
       if(reverse){
         const amount = parseFloat($('#amtTo').value);
-        if(isNaN(amount)) return;
+        if(!isFinite(amount)) return;
         const v = convert(amount, to, from);
-        if(v != null) $('#amtFrom').value = +v.toFixed(6);
+        if(v != null && isFinite(v)) $('#amtFrom').value = fmtAmount(v);
       } else {
         const amount = parseFloat($('#amtFrom').value);
-        if(isNaN(amount)) return;
+        if(!isFinite(amount)) return;
         const v = convert(amount, from, to);
-        if(v != null) $('#amtTo').value = +v.toFixed(6);
+        if(v != null && isFinite(v)) $('#amtTo').value = fmtAmount(v);
       }
     }
 
@@ -785,7 +805,9 @@
     }
 
     function updateCountdownUI(){
+      if(disposed) return;
       const el = $('#countdown');
+      if(!el) return;
       const chip = $('#liveChip');
       if(chip) chip.dataset.on = autoEnabled ? 'true' : 'false';
       const sw = $('#autoRefresh');
@@ -824,6 +846,7 @@
     }
 
     function applyData(data){
+      if(disposed || !document.getElementById('status')) return;
       if(provider === 'wise' && rates?.rates && data?.rates){
         const oldCount = Object.keys(rates.rates).length;
         const newCount = Object.keys(data.rates).length;
@@ -1050,6 +1073,7 @@
       );
 
       function syncFeeCombos(){
+        if(disposed || !document.getElementById('feeRateSource')) return;
         const codes = codeSet();
         feeSpendCombo.setCodes(codes, feeSpendCombo.get());
         feeChargeCombo.setCodes(codes, feeChargeCombo.get());
@@ -1283,18 +1307,7 @@
         btn.addEventListener('click', () => setFeeProvider(btn.dataset.feeProvider));
       });
 
-      // Recompute when main rates update
-      const _applyData = applyData;
-      // wrap applyData if not already - use event-ish by patching after definition is hard;
-      // instead poll-free: hook into existing applyData by replacing reference below isn't possible.
-      // We'll monkey-patch window-level hook:
-      const origApply = applyData;
-      // rebind name in outer scope via assignment on outer applyData — done after function exists.
-      // Simpler: override by assigning to outer variable through eval scope — same IIFE, so:
-      // Actually applyData is const-like function decl in outer IIFE — we can wrap:
-      // Not reassignable if function declaration... it's `function applyData` or const?
-      // Check: use Mutation? Easiest path: call syncFeeCombos from setInterval when on fee view — no.
-      // Patch: store hook
+      // Recompute fee combos whenever the shared rate set updates.
       window.__fxOnRates = function(){ try{ syncFeeCombos(); }catch(_){ } };
 
       setFeeMode(feeMode);

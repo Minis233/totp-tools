@@ -425,12 +425,18 @@
       if(rgb) applyColor(rgb);
     });
     $('#color-rgb').addEventListener('input', (e) => {
-      const m = e.target.value.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-      if(m) applyColor({ r: +m[1], g: +m[2], b: +m[3] });
+      const m = e.target.value.match(/(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)/);
+      if(!m) return;
+      const r = +m[1], g = +m[2], b = +m[3];
+      if([r,g,b].some(v => v < 0 || v > 255)){ window.toast('RGB 每个分量须在 0–255 之间'); return; }
+      applyColor({ r, g, b });
     });
     $('#color-hsl').addEventListener('input', (e) => {
-      const m = e.target.value.match(/(\d+)\s*,\s*(\d+)\%?\s*,\s*(\d+)\%?/);
-      if(m) applyColor(hslToRgb(+m[1], +m[2], +m[3]));
+      const m = e.target.value.match(/(-?\d+)\s*,\s*(-?\d+)\%?\s*,\s*(-?\d+)\%?/);
+      if(!m) return;
+      const h = +m[1], s = +m[2], l = +m[3];
+      if(h < 0 || h > 360 || s < 0 || s > 100 || l < 0 || l > 100){ window.toast('HSL 范围：H 0–360，S/L 0–100'); return; }
+      applyColor(hslToRgb(h, s, l));
     });
     $('#color-picker').addEventListener('input', (e) => {
       const rgb = hexToRgb(e.target.value);
@@ -443,36 +449,61 @@
       window.copyText($('#color-hex').value).then(ok => ok && window.toast('已复制 HEX'));
     });
 
-    // ---- Number base converter ----
-    let numUpdating = false;
-    function setBases(decVal){
-      if(numUpdating || isNaN(decVal)) return;
-      numUpdating = true;
-      $('#num-10').value = decVal;
-      $('#num-16').value = decVal.toString(16).toUpperCase();
-      $('#num-8').value  = decVal.toString(8);
-      $('#num-2').value  = decVal.toString(2);
-      numUpdating = false;
-    }
+    // ---- Number base converter (BigInt, arbitrary precision) ----
+    const DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     function validBaseValue(value, base){
       const signless = value.replace(/^[+-]/, '');
-      const digits = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'.slice(0, base);
-      return signless.length > 0 && [...signless.toUpperCase()].every(ch => digits.includes(ch));
+      const allowed = DIGITS.slice(0, base);
+      return signless.length > 0 && [...signless.toUpperCase()].every(ch => allowed.includes(ch));
+    }
+    function parseBig(value, base){
+      const neg = /^-/.test(value);
+      const signless = value.replace(/^[+-]/, '').toUpperCase();
+      const b = BigInt(base);
+      let n = 0n;
+      for(const ch of signless){
+        const d = DIGITS.indexOf(ch);
+        if(d < 0 || d >= base) throw new Error('bad digit');
+        n = n * b + BigInt(d);
+      }
+      return neg ? -n : n;
+    }
+    function bigToBase(n, base){
+      if(n === 0n) return '0';
+      const neg = n < 0n;
+      let x = neg ? -n : n;
+      const b = BigInt(base);
+      let out = '';
+      while(x > 0n){
+        out = DIGITS[Number(x % b)] + out;
+        x = x / b;
+      }
+      return (neg ? '-' : '') + out;
+    }
+
+    let numUpdating = false;
+    function setBases(decBig){
+      if(numUpdating) return;
+      numUpdating = true;
+      $('#num-10').value = bigToBase(decBig, 10);
+      $('#num-16').value = bigToBase(decBig, 16);
+      $('#num-8').value  = bigToBase(decBig, 8);
+      $('#num-2').value  = bigToBase(decBig, 2);
+      numUpdating = false;
     }
     function bindBase(id, base){
       $(id).addEventListener('input', (e) => {
         const v = e.target.value.trim();
         if(v === '') return;
         if(!validBaseValue(v, base)) return;
-        const n = parseInt(v, base);
-        if(isFinite(n)) setBases(n);
+        try { setBases(parseBig(v, base)); } catch(_){}
       });
     }
     bindBase('#num-10', 10);
     bindBase('#num-16', 16);
     bindBase('#num-8', 8);
     bindBase('#num-2', 2);
-    setBases(2026);
+    setBases(2026n);
 
     $('#num-convert').addEventListener('click', () => {
       const fromBase = Math.max(2, Math.min(36, parseInt($('#num-from-base').value, 10) || 10));
@@ -480,9 +511,9 @@
       const val = $('#num-from-val').value.trim();
       if(!val){ window.toast('请输入数字'); return; }
       if(!validBaseValue(val, fromBase)){ window.toast('输入数字与所选进制不匹配'); return; }
-      const n = parseInt(val, fromBase);
-      if(!isFinite(n)){ window.toast('输入数字与所选进制不匹配'); return; }
-      $('#num-to-val').value = n.toString(toBase).toUpperCase();
+      try {
+        $('#num-to-val').value = bigToBase(parseBig(val, fromBase), toBase);
+      } catch(_){ window.toast('输入数字与所选进制不匹配'); }
     });
   })();
   </script>

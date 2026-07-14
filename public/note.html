@@ -91,14 +91,14 @@
       trim: t => t.trim(),
       trimLines: t => t.split('\n').map(l => l.trim()).join('\n'),
       dedupe: t => Array.from(new Set(t.split('\n'))).join('\n'),
-      dedupeSorted: t => Array.from(new Set(t.split('\n'))).sort().join('\n'),
-      sortAsc: t => t.split('\n').sort().join('\n'),
-      sortDesc: t => t.split('\n').sort().reverse().join('\n'),
+      dedupeSorted: t => Array.from(new Set(t.split('\n'))).sort((a,b) => a.localeCompare(b, undefined, {numeric:true})).join('\n'),
+      sortAsc: t => t.split('\n').sort((a,b) => a.localeCompare(b, undefined, {numeric:true})).join('\n'),
+      sortDesc: t => t.split('\n').sort((a,b) => a.localeCompare(b, undefined, {numeric:true})).reverse().join('\n'),
       reverse: t => t.split('\n').reverse().join('\n'),
       removeEmpty: t => t.split('\n').filter(l => l.trim() !== '').join('\n'),
       upper: t => t.toUpperCase(),
       lower: t => t.toLowerCase(),
-      title: t => t.replace(/\b([a-z])/g, (_, c) => c.toUpperCase()),
+      title: t => t.replace(/(^|[\s\-_/([{"'])(\S)/gu, (_, sep, ch) => sep + ch.toLocaleUpperCase()),
       b64enc: t => {
         try{
           return btoa(unescape(encodeURIComponent(t)));
@@ -136,7 +136,12 @@
         try {
           const raw = t.trim();
           if(!raw) return '';
-          const normalized = raw.replace(/0x/gi, '').replace(/[\s,:-]+/g, '');
+          // Strip an optional 0x/0X prefix only at token starts, then remove separators.
+          const normalized = raw
+            .split(/[\s,:;-]+/)
+            .map(tok => tok.replace(/^0x/i, ''))
+            .join('');
+          if(!normalized) throw new Error('无有效 Hex 内容');
           if(/[^0-9a-fA-F]/.test(normalized)) throw new Error('包含非 Hex 字符');
           if(normalized.length % 2 !== 0) throw new Error('hex 长度必须为偶数');
           const bytes = new Uint8Array(normalized.length / 2);
