@@ -441,37 +441,33 @@
         async fetch(base, { onPartial } = {}){
           const rates = { [base]: 1 };
           let date = '';
-          const preferred = [comboFrom.get(), comboTo.get(), localStorage.getItem('fx.from'), localStorage.getItem('fx.to')]
-            .filter(Boolean).map(c => String(c).toUpperCase());
-          const priority = [...new Set([...preferred, ...WISE_PRIORITY])]
-            .filter(c => c && c !== base)
-            .slice(0, 14);
-          const pUrl = `/api/wise-rates?source=${encodeURIComponent(base)}&targets=${priority.join(',')}`;
-          const pResp = await fetch(pUrl, { cache: 'no-store' });
-          const pData = await pResp.json().catch(() => ({}));
-          if(!pResp.ok) throw new Error(pData.error || `HTTP ${pResp.status}`);
-          Object.assign(rates, pData.rates || {});
+          const size = 50;
+          const firstResp = await fetch(`/api/wise-rates?source=${encodeURIComponent(base)}&page=0&size=${size}`, { cache: 'no-store' });
+          const firstData = await firstResp.json().catch(() => ({}));
+          if(!firstResp.ok) throw new Error(firstData.error || `HTTP ${firstResp.status}`);
+          Object.assign(rates, firstData.rates || {});
           rates[base] = 1;
-          if(pData.date) date = pData.date;
+          if(firstData.date) date = firstData.date;
           if(typeof onPartial === 'function'){
-            onPartial({ base, date, rates: Object.assign({}, rates), source: `Wise mid-market · ${Object.keys(rates).length} 种（常用）`, partial: true });
+            onPartial({ base, date, rates: Object.assign({}, rates), source: `Wise mid-market · ${Object.keys(rates).length} 种（首屏）`, partial: true });
           }
-          let page = 0, totalPages = 1;
-          while(page < totalPages && page < 12){
-            const url = `/api/wise-rates?source=${encodeURIComponent(base)}&page=${page}&size=50`;
-            const resp = await fetch(url, { cache: 'no-store' });
-            const data = await resp.json().catch(() => ({}));
-            if(!resp.ok) break;
-            Object.assign(rates, data.rates || {});
+
+          const totalPages = Math.max(1, Number(firstData.totalPages) || 1);
+          const pageJobs = [];
+          for(let page = 1; page < totalPages; page++){
+            pageJobs.push(fetch(`/api/wise-rates?source=${encodeURIComponent(base)}&page=${page}&size=${size}`, { cache: 'no-store' })
+              .then(async resp => ({ ok: resp.ok, data: await resp.json().catch(() => ({})) }))
+              .catch(() => ({ ok: false, data: {} })));
+          }
+          const pages = await Promise.all(pageJobs);
+          for(const result of pages){
+            if(!result.ok) continue;
+            Object.assign(rates, result.data.rates || {});
             rates[base] = 1;
-            if(data.date) date = data.date;
-            if(typeof data.totalPages === 'number' && data.totalPages > 0) totalPages = data.totalPages;
-            else if(data.hasMore) totalPages = page + 2;
-            else totalPages = page + 1;
-            page += 1;
-            if(typeof onPartial === 'function'){
-              onPartial({ base, date, rates: Object.assign({}, rates), source: `Wise mid-market · ${Object.keys(rates).length} 种（加载中…）`, partial: true });
-            }
+            if(result.data.date) date = result.data.date;
+          }
+          if(typeof onPartial === 'function' && pages.length){
+            onPartial({ base, date, rates: Object.assign({}, rates), source: `Wise mid-market · ${Object.keys(rates).length} 种（已补全）`, partial: true });
           }
           return { base, date, rates, source: `Wise mid-market · ${Object.keys(rates).length} 种`, partial: false };
         }
