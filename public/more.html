@@ -454,10 +454,16 @@
       $('#num-2').value  = decVal.toString(2);
       numUpdating = false;
     }
+    function validBaseValue(value, base){
+      const signless = value.replace(/^[+-]/, '');
+      const digits = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'.slice(0, base);
+      return signless.length > 0 && [...signless.toUpperCase()].every(ch => digits.includes(ch));
+    }
     function bindBase(id, base){
       $(id).addEventListener('input', (e) => {
         const v = e.target.value.trim();
         if(v === '') return;
+        if(!validBaseValue(v, base)) return;
         const n = parseInt(v, base);
         if(isFinite(n)) setBases(n);
       });
@@ -473,10 +479,7 @@
       const toBase   = Math.max(2, Math.min(36, parseInt($('#num-to-base').value, 10) || 10));
       const val = $('#num-from-val').value.trim();
       if(!val){ window.toast('请输入数字'); return; }
-      const signless = val.replace(/^[+-]/, '');
-      const digits = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'.slice(0, fromBase);
-      const valid = signless.length > 0 && [...signless.toUpperCase()].every(ch => digits.includes(ch));
-      if(!valid){ window.toast('输入数字与所选进制不匹配'); return; }
+      if(!validBaseValue(val, fromBase)){ window.toast('输入数字与所选进制不匹配'); return; }
       const n = parseInt(val, fromBase);
       if(!isFinite(n)){ window.toast('输入数字与所选进制不匹配'); return; }
       $('#num-to-val').value = n.toString(toBase).toUpperCase();
