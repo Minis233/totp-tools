@@ -14,7 +14,7 @@ export async function onRequestGet(context) {
   const targets = targetsParam ? allTargets : allTargets.slice(page * size, (page + 1) * size);
   const rates = { [source]: 1 };
 
-  const settled = await Promise.allSettled(targets.map(async target => {
+  async function fetchOne(target) {
     if (target === source) return [target, 1];
     const endpoint = `https://wise.com/rates/live?source=${encodeURIComponent(source)}&target=${encodeURIComponent(target)}`;
     let lastStatus = 0;
@@ -28,10 +28,21 @@ export async function onRequestGet(context) {
         return [target, Number(value)];
       }
       if (![403, 429, 500, 502, 503, 504].includes(response.status)) break;
-      await new Promise(resolve => setTimeout(resolve, 120 + Math.random() * 180));
+      await new Promise(resolve => setTimeout(resolve, 180 + Math.random() * 320));
     }
     throw new Error(`Wise ${lastStatus}`);
-  }));
+  }
+
+  const settled = new Array(targets.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < targets.length) {
+      const index = cursor++;
+      try { settled[index] = { status: 'fulfilled', value: await fetchOne(targets[index]) }; }
+      catch (reason) { settled[index] = { status: 'rejected', reason }; }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(8, targets.length) }, worker));
 
   for (const result of settled) {
     if (result.status === 'fulfilled') rates[result.value[0]] = result.value[1];

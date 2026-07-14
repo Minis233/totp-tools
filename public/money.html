@@ -690,8 +690,15 @@
     function writeCache(data){
       try{
         if(provider === 'wise' && (!data.rates || Object.keys(data.rates).length < 4)) return;
+        const key = cacheKey(provider, data.base || 'USD');
+        if(provider === 'wise'){
+          const old = JSON.parse(localStorage.getItem(key) || 'null');
+          const oldCount = old?.data?.rates ? Object.keys(old.data.rates).length : 0;
+          const newCount = Object.keys(data.rates).length;
+          if(oldCount > newCount && Date.now() - (old.savedAt || 0) < 12 * 60 * 60 * 1000) return;
+        }
         const payload = { provider, savedAt: Date.now(), data };
-        localStorage.setItem(cacheKey(provider, data.base || 'USD'), JSON.stringify(payload));
+        localStorage.setItem(key, JSON.stringify(payload));
         // also keep legacy key for older builds
         localStorage.setItem('fx.cache', JSON.stringify(payload));
       }catch(_){}
@@ -702,7 +709,8 @@
       const key = cacheKey('wise', b);
       try{
         const old = JSON.parse(localStorage.getItem(key) || 'null');
-        if(old && old.catalogVersion === 2 && Date.now() - (old.savedAt || 0) < 12 * 60 * 60 * 1000) return;
+        const oldCount = old?.data?.rates ? Object.keys(old.data.rates).length : 0;
+        if(oldCount >= 50 && Date.now() - (old.savedAt || 0) < 12 * 60 * 60 * 1000) return;
         const resp = await fetch(`/api/wise-rates?source=${encodeURIComponent(b)}&page=0&size=50`, { cache: 'force-cache' });
         const page = await resp.json().catch(() => ({}));
         if(!resp.ok || !page.rates || Object.keys(page.rates).length < 4) return;
