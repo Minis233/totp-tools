@@ -17,22 +17,39 @@ export async function onRequestGet(context) {
   const settled = await Promise.allSettled(targets.map(async target => {
     if (target === source) return [target, 1];
     const endpoint = `https://wise.com/rates/live?source=${encodeURIComponent(source)}&target=${encodeURIComponent(target)}`;
-    const response = await fetch(endpoint, { headers: { accept: 'application/json' } });
-    if (!response.ok) throw new Error(`Wise ${response.status}`);
-    const data = await response.json();
-    const value = Array.isArray(data) ? data[0]?.value : data?.value;
-    if (!Number.isFinite(Number(value))) throw new Error('Invalid Wise rate');
-    return [target, Number(value)];
+    let lastStatus = 0;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = await fetch(endpoint, { headers: { accept: 'application/json', 'user-agent': 'Mozilla/5.0' } });
+      lastStatus = response.status;
+      if (response.ok) {
+        const data = await response.json();
+        const value = Array.isArray(data) ? data[0]?.value : data?.value;
+        if (!Number.isFinite(Number(value))) throw new Error('Invalid Wise rate');
+        return [target, Number(value)];
+      }
+      if (![403, 429, 500, 502, 503, 504].includes(response.status)) break;
+      await new Promise(resolve => setTimeout(resolve, 120 + Math.random() * 180));
+    }
+    throw new Error(`Wise ${lastStatus}`);
   }));
 
   for (const result of settled) {
     if (result.status === 'fulfilled') rates[result.value[0]] = result.value[1];
   }
 
+  const matched = Object.keys(rates).length - 1;
+  const minimum = Math.min(targets.length, targetsParam ? Math.min(2, targets.length) : Math.max(3, Math.floor(targets.length * 0.2)));
+  if (targets.length && matched < minimum) {
+    return Response.json({ error: 'Wise upstream temporarily unavailable', matched, pageTargets: targets.length }, {
+      status: 503,
+      headers: { 'cache-control': 'no-store', 'retry-after': '15' }
+    });
+  }
+
   const totalPages = targetsParam ? null : Math.ceil(allTargets.length / size);
   return Response.json({
     provider: 'wise', base: source, date: Date.now(), rates,
-    count: Object.keys(rates).length, matched: Object.keys(rates).length - 1,
+    count: Object.keys(rates).length, matched,
     page, size, totalTargets: targetsParam ? null : allTargets.length,
     totalPages, hasMore: targetsParam ? false : page + 1 < totalPages,
     pageTargets: targets.length

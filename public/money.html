@@ -449,6 +449,7 @@
           const firstResp = await fetch(`/api/wise-rates?source=${encodeURIComponent(base)}&page=0&size=${size}`, { cache: 'no-store' });
           const firstData = await firstResp.json().catch(() => ({}));
           if(!firstResp.ok) throw new Error(firstData.error || `HTTP ${firstResp.status}`);
+          if(!firstData.rates || Object.keys(firstData.rates).length < 4) throw new Error('Wise 返回数据不足');
           Object.assign(rates, firstData.rates || {});
           rates[base] = 1;
           if(firstData.date) date = firstData.date;
@@ -666,6 +667,7 @@
           if(!raw) continue;
           const obj = JSON.parse(raw);
           if(!obj || !obj.data || !obj.data.rates) continue;
+          if((p || provider) === 'wise' && Object.keys(obj.data.rates).length < 4) continue;
           if(obj.provider && obj.provider !== (p || provider)) continue;
           if(!best || (obj.savedAt || 0) > (best.savedAt || 0)) best = obj;
         }
@@ -676,6 +678,7 @@
           try{
             const obj = JSON.parse(localStorage.getItem(k));
             if(obj && obj.provider === (p || provider) && obj.data && obj.data.rates){
+              if((p || provider) === 'wise' && Object.keys(obj.data.rates).length < 4) continue;
               if(!best || (obj.savedAt || 0) > (best.savedAt || 0)) best = obj;
             }
           }catch(_){}
@@ -686,6 +689,7 @@
 
     function writeCache(data){
       try{
+        if(provider === 'wise' && (!data.rates || Object.keys(data.rates).length < 4)) return;
         const payload = { provider, savedAt: Date.now(), data };
         localStorage.setItem(cacheKey(provider, data.base || 'USD'), JSON.stringify(payload));
         // also keep legacy key for older builds
@@ -701,7 +705,7 @@
         if(old && old.catalogVersion === 2 && Date.now() - (old.savedAt || 0) < 12 * 60 * 60 * 1000) return;
         const resp = await fetch(`/api/wise-rates?source=${encodeURIComponent(b)}&page=0&size=50`, { cache: 'force-cache' });
         const page = await resp.json().catch(() => ({}));
-        if(!resp.ok || !page.rates) return;
+        if(!resp.ok || !page.rates || Object.keys(page.rates).length < 4) return;
         const data = { base: page.base || b, date: page.date || '', rates: page.rates, source: `Wise mid-market · ${Object.keys(page.rates).length} 种（预载）`, partial: true };
         localStorage.setItem(key, JSON.stringify({ provider: 'wise', savedAt: Date.now(), catalogVersion: 2, data }));
       }catch(_){}
