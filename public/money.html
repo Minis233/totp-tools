@@ -8,7 +8,7 @@
   <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/css/style.css">
   <link rel="stylesheet" href="/assets/css/ui-v4.css">
-  <link rel="stylesheet" href="/assets/css/money-v4.css?v=20260714d">
+  <link rel="stylesheet" href="/assets/css/money-v4.css?v=20260714e">
   <script src="/assets/js/common.js?v=20260714b"></script>
 </head>
 <body>
@@ -24,7 +24,7 @@
       <div class="panel hero">
         <div class="page-head">
           <h1>💱 汇率换算</h1>
-          <p class="lead">支持全球 160+ 法币。可切换 ECB / 全球综合 / Wise 中间价，并支持实时刷新。</p>
+          <p class="lead">支持全球 160+ 法币。可切换 ECB / 全球综合 / Wise 中间价，并支持实时刷新；各来源覆盖数量不同。</p>
         </div>
         <div class="panel-body">
           <div class="tabs" id="providerTabs">
@@ -255,6 +255,7 @@
       CDF: "刚果法郎",
       CRC: "哥斯达黎加科朗",
       CUP: "古巴比索",
+      CUC: "古巴可兑换比索",
       CVE: "佛得角埃斯库多",
       DJF: "吉布提法郎",
       DOP: "多米尼加比索",
@@ -287,6 +288,7 @@
       KHR: "柬埔寨瑞尔",
       KID: "基里巴斯元",
       KMF: "科摩罗法郎",
+      KPW: "朝鲜元",
       KWD: "科威特第纳尔",
       KYD: "开曼群岛元",
       KZT: "哈萨克斯坦坚戈",
@@ -326,6 +328,7 @@
       SLL: "塞拉利昂旧利昂",
       SOS: "索马里先令",
       SRD: "苏里南元",
+      SVC: "萨尔瓦多科朗",
       SSP: "南苏丹镑",
       STN: "圣多美多布拉",
       SYP: "叙利亚镑",
@@ -341,6 +344,7 @@
       UYU: "乌拉圭比索",
       UZS: "乌兹别克斯坦苏姆",
       VES: "委内瑞拉玻利瓦尔",
+      VEF: "委内瑞拉旧玻利瓦尔",
       VUV: "瓦努阿图瓦图",
       WST: "萨摩亚塔拉",
       XAF: "中非法郎",
@@ -437,7 +441,7 @@
       },
       wise: {
         label: 'Wise · mid-market',
-        hint: 'Wise 中间市场价（mid-market，不含手续费）。先加载常用币种，再后台补全约 160 种。',
+        hint: 'Wise 中间市场价（mid-market，不含手续费）。当前接口可稳定获取约 160+ 种报价；切换时先显示预载数据，再后台补全。',
         async fetch(base, { onPartial } = {}){
           const rates = { [base]: 1 };
           let date = '';
@@ -686,6 +690,20 @@
         localStorage.setItem(cacheKey(provider, data.base || 'USD'), JSON.stringify(payload));
         // also keep legacy key for older builds
         localStorage.setItem('fx.cache', JSON.stringify(payload));
+      }catch(_){}
+    }
+
+    async function warmWiseCache(base){
+      const b = String(base || 'USD').toUpperCase();
+      const key = cacheKey('wise', b);
+      try{
+        const old = JSON.parse(localStorage.getItem(key) || 'null');
+        if(old && old.catalogVersion === 2 && Date.now() - (old.savedAt || 0) < 12 * 60 * 60 * 1000) return;
+        const resp = await fetch(`/api/wise-rates?source=${encodeURIComponent(b)}&page=0&size=50`, { cache: 'force-cache' });
+        const page = await resp.json().catch(() => ({}));
+        if(!resp.ok || !page.rates) return;
+        const data = { base: page.base || b, date: page.date || '', rates: page.rates, source: `Wise mid-market · ${Object.keys(page.rates).length} 种（预载）`, partial: true };
+        localStorage.setItem(key, JSON.stringify({ provider: 'wise', savedAt: Date.now(), catalogVersion: 2, data }));
       }catch(_){}
     }
 
@@ -948,6 +966,7 @@
       }
     }catch(_){}
 
+    warmWiseCache(comboFrom.get() || 'USD');
     fetchRates(comboFrom.get() || 'USD').then(() => {
       if(autoEnabled) armCountdown(true);
     });
