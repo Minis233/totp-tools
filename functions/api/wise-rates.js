@@ -66,11 +66,13 @@ export async function onRequestGet(context) {
   const matched = Object.keys(rates).length - 1;
   const minimum = Math.min(targets.length, targetsParam ? Math.min(2, targets.length) : Math.max(3, Math.floor(targets.length * 0.2)));
   let fallback = false;
-  if (targets.length && matched < minimum && source === 'USD') {
+  if (source === 'USD') {
     for (const target of targets) {
-      if (Number.isFinite(USD_SNAPSHOT[target])) rates[target] = USD_SNAPSHOT[target];
+      if (rates[target] == null && Number.isFinite(USD_SNAPSHOT[target])) {
+        rates[target] = USD_SNAPSHOT[target];
+        fallback = true;
+      }
     }
-    fallback = true;
   }
   const finalMatched = Object.keys(rates).length - 1;
   if (targets.length && finalMatched < minimum) {
