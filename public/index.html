@@ -66,11 +66,22 @@
 
     // -------- state --------
     let accounts = [];
+    let needsResave = false;
     try {
       const stored = JSON.parse(STORAGE.getItem(LS_KEY) || '[]');
-      accounts = Array.isArray(stored) ? stored.filter(a => a && typeof a === 'object' && typeof a.secret === 'string') : [];
+      accounts = Array.isArray(stored)
+        ? stored
+            .filter(a => a && typeof a === 'object' && typeof a.secret === 'string')
+            .map(a => {
+              const meta = sanitizeMeta(a.algorithm, a.digits, a.period);
+              if(a.algorithm !== meta.algorithm || a.digits !== meta.digits || a.period !== meta.period) needsResave = true;
+              return { ...a, algorithm: meta.algorithm, digits: meta.digits, period: meta.period };
+            })
+        : [];
     } catch(e){ accounts = []; }
     const save = () => STORAGE.setItem(LS_KEY, JSON.stringify(accounts));
+    // Rewrite storage once if any legacy record was sanitized on load.
+    if(needsResave){ try { save(); } catch(_){} }
 
     function uid(){ return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
 
@@ -264,17 +275,31 @@
     });
 
     // -------- add / once --------
+    // Clamp TOTP parameters to supported ranges — shared by QR / JSON / manual add
+    // so no import path can inject bad values (e.g. digits:999, period:-5).
+    function sanitizeMeta(algorithm, digits, period){
+      const algo = String(algorithm || 'SHA1').toUpperCase();
+      const d = parseInt(digits, 10);
+      const p = parseInt(period, 10);
+      return {
+        algorithm: ['SHA1','SHA256','SHA512'].includes(algo) ? algo : 'SHA1',
+        digits: [6,7,8].includes(d) ? d : 6,
+        period: (Number.isInteger(p) && p >= 5 && p <= 300) ? p : 30,
+      };
+    }
+
     function addAccount(remark, secret, extra = {}){
       const s = validateSecret(secret);
       if(!s) return false;
+      const meta = sanitizeMeta(extra.algorithm, extra.digits, extra.period);
       accounts.push({
         id: uid(),
         remark: (remark || '未命名').trim(),
         issuer: extra.issuer || '',
         secret: s,
-        algorithm: extra.algorithm || 'SHA1',
-        digits: extra.digits || 6,
-        period: extra.period || 30,
+        algorithm: meta.algorithm,
+        digits: meta.digits,
+        period: meta.period,
       });
       save(); render();
       window.toast('已添加账号');
@@ -441,14 +466,15 @@
           for(const a of data){
             const s = normSecret(a.secret);
             if(!s || !/^[A-Z2-7]+$/.test(s)) continue;
+            const meta = sanitizeMeta(a.algorithm, a.digits, a.period);
             accounts.push({
               id: uid(),
               remark: a.remark || a.label || '未命名',
               issuer: a.issuer || '',
               secret: s,
-              algorithm: (a.algorithm || 'SHA1').toUpperCase(),
-              digits: parseInt(a.digits || 6, 10),
-              period: parseInt(a.period || 30, 10),
+              algorithm: meta.algorithm,
+              digits: meta.digits,
+              period: meta.period,
             });
             n++;
           }

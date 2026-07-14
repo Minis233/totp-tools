@@ -752,14 +752,17 @@
       return (amount / fromRate) * toRate;
     }
 
-    // Format a converted amount without losing tiny values or emitting sci-notation.
+    // Format a converted amount: keep tiny values, avoid 300-digit strings for huge ones.
     function fmtAmount(v){
       if(!isFinite(v)) return '';
       if(v === 0) return '0';
       const abs = Math.abs(v);
       let out;
-      if(abs >= 1e15 || abs < 1e-6){
-        // very large / very small: use significant digits, strip sci-notation
+      if(abs >= 1e15){
+        // very large: compact exponential is far more readable than a 300-digit string
+        out = v.toExponential(6).replace(/\.?0+e/i, 'e');
+      } else if(abs < 1e-6){
+        // very small: significant digits, strip sci-notation so value is not lost
         out = v.toPrecision(8);
         if(/e/i.test(out)) out = Number(v).toLocaleString('en-US', { maximumFractionDigits: 20, useGrouping: false });
       } else {

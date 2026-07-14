@@ -99,10 +99,10 @@
         if(!blob){ $('#info').innerHTML = '<span class="value">无法编码该格式</span>'; return; }
         const kbBefore = (srcSize/1024).toFixed(1);
         const kbAfter  = (blob.size/1024).toFixed(1);
-        const ratio = ((blob.size/srcSize)*100).toFixed(1);
+        const ratio = srcSize > 0 ? ((blob.size/srcSize)*100).toFixed(1) + '%' : '—';
         $('#info').innerHTML = `
           <span class="label">原始</span><span class="value">${img.naturalWidth}×${img.naturalHeight} · ${kbBefore} KB</span>
-          <span class="label">输出</span><span class="value">${w}×${h} · ${kbAfter} KB（${ratio}%）</span>`;
+          <span class="label">输出</span><span class="value">${w}×${h} · ${kbAfter} KB（${ratio}）</span>`;
         if(cv.dataset.outBlobUrl) URL.revokeObjectURL(cv.dataset.outBlobUrl);
         cv.dataset.outType = fmt;
         cv.dataset.outName = 'image_' + Date.now() + '.' + (fmt === 'image/jpeg' ? 'jpg' : fmt.split('/')[1]);
