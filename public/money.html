@@ -453,8 +453,9 @@
           Object.assign(rates, firstData.rates || {});
           rates[base] = 1;
           if(firstData.date) date = firstData.date;
+          const firstSuffix = firstData.fallback ? '快照' : '首屏';
           if(typeof onPartial === 'function'){
-            onPartial({ base, date, rates: Object.assign({}, rates), source: `Wise mid-market · ${Object.keys(rates).length} 种（首屏）`, partial: true });
+            onPartial({ base, date, rates: Object.assign({}, rates), source: `Wise mid-market · ${Object.keys(rates).length} 种（${firstSuffix}）`, partial: true });
           }
 
           const totalPages = Math.max(1, Number(firstData.totalPages) || 1);
@@ -466,6 +467,7 @@
           }
           const pages = await Promise.all(pageJobs);
           const failedPages = pages.filter(result => !result.ok).length;
+          const usedFallback = !!firstData.fallback || pages.some(result => result.data?.fallback);
           for(const result of pages){
             if(!result.ok) continue;
             Object.assign(rates, result.data.rates || {});
@@ -475,10 +477,11 @@
           if(failedPages){
             throw new Error(`Wise 有 ${failedPages} 页暂时不可用`);
           }
+          const finalLabel = usedFallback ? '含最近快照' : '已补全';
           if(typeof onPartial === 'function' && pages.length){
-            onPartial({ base, date, rates: Object.assign({}, rates), source: `Wise mid-market · ${Object.keys(rates).length} 种（已补全）`, partial: true });
+            onPartial({ base, date, rates: Object.assign({}, rates), source: `Wise mid-market · ${Object.keys(rates).length} 种（${finalLabel}）`, partial: true });
           }
-          return { base, date, rates, source: `Wise mid-market · ${Object.keys(rates).length} 种`, partial: false };
+          return { base, date, rates, source: `Wise mid-market · ${Object.keys(rates).length} 种${usedFallback ? ' · 含最近快照' : ''}`, partial: false };
         }
       }
     };
