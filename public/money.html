@@ -17,7 +17,7 @@
     <main>
       <div class="tabs money-subnav" id="moneySubnav" role="tablist">
         <button type="button" class="tab active" data-money-view="fx">汇率换算</button>
-        <button type="button" class="tab" data-money-view="fee">卡外币损耗</button>
+        <button type="button" class="tab" data-money-view="fee">Crypto Card</button>
       </div>
 
       <div id="view-fx">
@@ -92,14 +92,10 @@
 
       <div id="view-fee" hidden>
         <div class="panel hero">
-          <div class="page-head">
-            <h1>💳 卡外币损耗</h1>
-            <p class="lead">按消费币种与实扣币种，对照中间价估算外币卡损耗。例：消费 100 CNY，实扣 14.8 USD。</p>
-          </div>
           <div class="panel-body">
             <div class="tabs fee-mode-tabs" id="feeModeTabs">
-              <button type="button" class="tab active" data-fee-mode="pct">损耗</button>
-              <button type="button" class="tab" data-fee-mode="amt">百分比</button>
+              <button type="button" class="tab active" data-fee-mode="pct">实扣</button>
+              <button type="button" class="tab" data-fee-mode="amt">费率</button>
             </div>
             <p id="feeModeHint" class="muted small fx-hint">例：消费 100 CNY，银行实扣 14.8 USD。可在下方切换汇率来源。</p>
 
