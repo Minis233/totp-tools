@@ -115,12 +115,12 @@
             <div id="feeModePct" class="fee-mode">
               <div class="fee-pair">
                 <div class="fee-leg">
-                  <div class="fee-leg-title">消费（应扣）</div>
+                  <div class="fee-leg-title">应扣金额</div>
                   <div id="feeSpendCombo" class="ccy-combo" data-side="spend"></div>
                   <input id="feeShould" class="input" type="number" inputmode="decimal" step="any" placeholder="">
                 </div>
                 <div class="fee-leg">
-                  <div class="fee-leg-title">银行实扣</div>
+                  <div class="fee-leg-title">实扣金额</div>
                   <div id="feeChargeCombo" class="ccy-combo" data-side="charge"></div>
                   <input id="feeActual" class="input" type="number" inputmode="decimal" step="any" placeholder="">
                 </div>
@@ -131,18 +131,18 @@
             <div id="feeModeAmt" class="fee-mode" hidden>
               <div class="fee-pair">
                 <div class="fee-leg">
-                  <div class="fee-leg-title">我应付</div>
+                  <div class="fee-leg-title">应付金额</div>
                   <div id="feePayCombo" class="ccy-combo" data-side="pay"></div>
-                  <input id="feePay" class="input" type="number" inputmode="decimal" step="any" placeholder="账单金额">
+                  <input id="feePay" class="input" type="number" inputmode="decimal" step="any" placeholder="">
                 </div>
                 <div class="fee-leg">
-                  <div class="fee-leg-title">实际支付币种</div>
+                  <div class="fee-leg-title">实扣币种</div>
                   <div id="feeActualPayCombo" class="ccy-combo" data-side="actual-pay"></div>
                   <div class="fee-pct-wrap">
                     <input id="feePct" class="input" type="number" inputmode="decimal" step="any" placeholder="">
                     <span class="fee-pct-suffix">%</span>
                   </div>
-                  <p class="muted small" style="margin:0">损耗百分比 · 结果按实际支付币种显示</p>
+                  <p class="muted small" style="margin:0">损耗百分比 · 结果按实扣币种显示</p>
                 </div>
               </div>
             </div>
