@@ -12,7 +12,8 @@
 
 /* segmented controls: roomy two-column buttons */
 .money-subnav,#feeModeTabs{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px!important;padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important;overflow:visible!important}
-.money-subnav{margin:0 0 18px!important}
+.money-subnav{margin:0 0 0!important}
+#view-fee .panel.hero{padding-top:12px!important}
 .money-subnav .tab,#feeModeTabs .tab{width:100%;min-width:0;min-height:52px!important;padding:12px 16px!important;border:1px solid var(--border)!important;border-radius:15px!important;background:var(--panel)!important;color:var(--text)!important;box-shadow:var(--shadow)!important;font-size:14px!important;font-weight:750!important;text-align:center;justify-content:center}
 .money-subnav .tab.active,#feeModeTabs .tab.active{background:linear-gradient(142deg,var(--accent) 0%,var(--accent-2) 100%)!important;color:#fff!important;border-color:var(--accent)!important;box-shadow:0 8px 22px rgba(255,105,0,.22)!important}
 #feeModeTabs{margin:0 0 14px!important}
