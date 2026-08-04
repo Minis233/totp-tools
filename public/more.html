@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>更多工具</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="UUID 生成 / 密码生成 / 时间戳 / 哈希计算 / 二维码生成 等常用小工具。">
+  <link rel="icon" type="image/svg+xml" href="/assets/img/favicon.svg">
+  <link rel="stylesheet" href="/assets/css/style.css">
+  <link rel="stylesheet" href="/assets/css/ui-v4.css?v=20260804">
+  <script src="/assets/js/otpauth.umd.min.js"></script>
+  <script src="/assets/js/qrcode.min.js"></script>
+  <script src="/assets/js/jsQR.js"></script>
+  <script src="/assets/js/common.js?v=20260714b"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" data-sidebar></aside>
+    <main>
+      <div class="panel hero">
+        <h1>🧰 更多工具</h1>
+        <p class="lead">一组常用的纯前端小工具，全部在浏览器本地运行，不上传任何数据。</p>
+        <hr>
+
+        <div class="tabs">
+          <div class="tab active" data-tab="uuid">UUID</div>
+          <div class="tab" data-tab="pwd">密码生成</div>
+          <div class="tab" data-tab="ts">时间戳</div>
+          <div class="tab" data-tab="hash">哈希</div>
+          <div class="tab" data-tab="qr">二维码</div>
+          <div class="tab" data-tab="jwt">JWT 解码</div>
+          <div class="tab" data-tab="color">颜色转换</div>
+          <div class="tab" data-tab="num">进制转换</div>
+        </div>
+
+        <!-- UUID -->
+        <section data-pane="uuid">
+          <div class="row">
+            <input id="uuid-out" class="input" readonly>
+            <button id="uuid-gen" class="btn">生成</button>
+            <button id="uuid-copy" class="btn ghost">复制</button>
+          </div>
+          <p class="muted small">生成 UUID v4（基于 crypto.randomUUID 或 randomValues 回退）。</p>
+        </section>
+
+        <!-- Password -->
+        <section data-pane="pwd" hidden>
+          <div class="row">
+            <input id="pwd-out" class="input" readonly>
+            <button id="pwd-gen" class="btn">生成</button>
+            <button id="pwd-copy" class="btn ghost">复制</button>
+          </div>
+          <div class="row">
+            <label class="muted small">长度</label>
+            <input id="pwd-len" class="input" type="number" min="4" max="128" value="20" style="max-width:120px">
+            <label class="flex"><input id="pwd-up" type="checkbox" checked>大写</label>
+            <label class="flex"><input id="pwd-low" type="checkbox" checked>小写</label>
+            <label class="flex"><input id="pwd-num" type="checkbox" checked>数字</label>
+            <label class="flex"><input id="pwd-sym" type="checkbox">符号</label>
+            <label class="flex"><input id="pwd-amb" type="checkbox" checked>排除易混淆</label>
+          </div>
+        </section>
+
+        <!-- Timestamp -->
+        <section data-pane="ts" hidden>
+          <div class="kv"><span class="label">当前时间戳（秒）</span><span id="ts-now-s" class="value"></span></div>
+          <div class="kv"><span class="label">当前时间戳（毫秒）</span><span id="ts-now-ms" class="value"></span></div>
+          <hr>
+          <div class="grid-2">
+            <div class="col">
+              <label class="muted small">时间戳 → 日期</label>
+              <input id="ts-in" class="input" placeholder="如 1700000000 或 1700000000000">
+              <div id="ts-out" class="muted small"></div>
+            </div>
+            <div class="col">
+              <label class="muted small">日期 → 时间戳</label>
+              <input id="dt-in" class="input" type="datetime-local">
+              <div id="dt-out" class="muted small"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Hash -->
+        <section data-pane="hash" hidden>
+          <textarea id="hash-in" class="textarea" placeholder="输入要计算哈希的文本..."></textarea>
+          <div class="row" style="margin-top:8px">
+            <button class="btn" data-hash="SHA-1">SHA-1</button>
+            <button class="btn" data-hash="SHA-256">SHA-256</button>
+            <button class="btn" data-hash="SHA-384">SHA-384</button>
+            <button class="btn" data-hash="SHA-512">SHA-512</button>
+          </div>
+          <div class="kv" style="margin-top:8px"><span class="label" id="hash-name">结果</span><span id="hash-out" class="value muted"></span></div>
+          <p class="muted small">注：MD5 不在 Web Crypto 标准中，本工具仅提供安全 SHA 系列。</p>
+        </section>
+
+        <!-- QR -->
+        <section data-pane="qr" hidden>
+          <textarea id="qr-text" class="textarea" placeholder="输入文本或 URL..."></textarea>
+          <div class="row" style="margin-top:8px">
+            <button id="qr-gen" class="btn">生成二维码</button>
+            <button id="qr-download" class="btn ghost">下载 PNG</button>
+          </div>
+          <div id="qr-box" style="margin-top:14px;display:flex;justify-content:center"></div>
+        </section>
+
+        <!-- JWT decode -->
+        <section data-pane="jwt" hidden>
+          <textarea id="jwt-in" class="textarea code-input" placeholder="粘贴 JWT (eyJ...)"></textarea>
+          <div class="row" style="margin-top:8px">
+            <button id="jwt-decode" class="btn">解码</button>
+            <span class="muted small">仅在浏览器本地解码，不会上传任何数据。</span>
+          </div>
+          <div id="jwt-out" style="margin-top:12px"></div>
+        </section>
+
+        <!-- Color converter -->
+        <section data-pane="color" hidden>
+          <div class="color-grid">
+            <div id="color-swatch" class="color-swatch" style="background:#009688"></div>
+            <div class="col">
+              <div class="row tight">
+                <label class="muted small" style="min-width:60px">HEX</label>
+                <input id="color-hex" class="input code-input" value="#009688">
+              </div>
+              <div class="row tight">
+                <label class="muted small" style="min-width:60px">RGB</label>
+                <input id="color-rgb" class="input code-input" value="rgb(0, 150, 136)">
+              </div>
+              <div class="row tight">
+                <label class="muted small" style="min-width:60px">HSL</label>
+                <input id="color-hsl" class="input code-input" value="hsl(174, 100%, 29%)">
+              </div>
+              <div class="row tight">
+                <label class="muted small" style="min-width:60px">HSV</label>
+                <input id="color-hsv" class="input code-input" value="hsv(174, 100%, 59%)">
+              </div>
+              <div class="row tight">
+                <input id="color-picker" type="color" value="#009688" style="width:48px;height:36px;border:1px solid var(--border-soft);border-radius:8px;background:transparent;cursor:pointer;padding:0">
+                <button id="color-random" class="btn ghost btn-sm">随机色</button>
+                <button id="color-copy" class="btn ghost btn-sm">复制 HEX</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Number base converter -->
+        <section data-pane="num" hidden>
+          <div class="grid-2">
+            <div class="col">
+              <div class="row tight"><label class="muted small" style="min-width:64px">十进制</label><input id="num-10" class="input code-input" value="2026"></div>
+              <div class="row tight"><label class="muted small" style="min-width:64px">十六进制</label><input id="num-16" class="input code-input"></div>
+              <div class="row tight"><label class="muted small" style="min-width:64px">八进制</label><input id="num-8" class="input code-input"></div>
+              <div class="row tight"><label class="muted small" style="min-width:64px">二进制</label><input id="num-2" class="input code-input"></div>
+            </div>
+            <div class="col">
+              <label class="muted small">自定义进制（2 - 36）</label>
+              <div class="row tight"><label class="muted small" style="min-width:30px">从</label><input id="num-from-base" class="input" type="number" min="2" max="36" value="10" style="max-width:80px"><input id="num-from-val" class="input code-input" placeholder="输入数字"></div>
+              <div class="row tight"><label class="muted small" style="min-width:30px">到</label><input id="num-to-base" class="input" type="number" min="2" max="36" value="16" style="max-width:80px"><input id="num-to-val" class="input code-input" readonly></div>
+              <div class="row"><button id="num-convert" class="btn">转换</button></div>
+            </div>
+          </div>
+          <p class="muted small" style="margin-top:10px">前 4 个输入框联动十进制/十六进制/八进制/二进制；下方支持任意 2-36 进制互转。</p>
+        </section>
+      </div>
+      <footer class="foot">© 在线工具 · 开源 MIT</footer>
+    
+  <script>
+  (function(){
+    'use strict';
+    const $ = s => document.querySelector(s);
+
+    // Tabs
+    document.querySelectorAll('.tab').forEach(t => {
+      t.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        document.querySelectorAll('[data-pane]').forEach(p => p.hidden = (p.dataset.pane !== t.dataset.tab));
+      });
+    });
+
+    // ---- UUID ----
+    function uuidV4(){
+      if(crypto.randomUUID) return crypto.randomUUID();
+      const b = new Uint8Array(16);
+      crypto.getRandomValues(b);
+      b[6] = (b[6] & 0x0f) | 0x40;
+      b[8] = (b[8] & 0x3f) | 0x80;
+      const h = Array.from(b, x => x.toString(16).padStart(2,'0'));
+      return `${h.slice(0,4).join('')}-${h.slice(4,6).join('')}-${h.slice(6,8).join('')}-${h.slice(8,10).join('')}-${h.slice(10).join('')}`;
+    }
+    function genUUID(){ $('#uuid-out').value = uuidV4(); }
+    $('#uuid-gen').addEventListener('click', genUUID);
+    $('#uuid-copy').addEventListener('click', () => {
+      const v = $('#uuid-out').value; if(!v) return window.toast('请先生成');
+      window.copyText(v).then(ok => ok && window.toast('已复制'));
+    });
+    genUUID();
+
+    // ---- Password ----
+    function randInt(max){
+      const r = new Uint32Array(1);
+      const limit = Math.floor(0x100000000 / max) * max;
+      while(true){ crypto.getRandomValues(r); if(r[0] < limit) return r[0] % max; }
+    }
+    function genPwd(){
+      const len = Math.max(4, Math.min(128, parseInt($('#pwd-len').value, 10) || 20));
+      let pool = '';
+      let UP = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      let LO = 'abcdefghijklmnopqrstuvwxyz';
+      let NU = '0123456789';
+      let SY = '!@#$%^&*()-_=+[]{};:,.<>?';
+      const amb = $('#pwd-amb').checked;
+      if(amb){ UP = UP.replace(/[OI]/g,''); LO = LO.replace(/[lo]/g,''); NU = NU.replace(/[01]/g,''); }
+      const groups = [];
+      if($('#pwd-up').checked){ pool += UP; groups.push(UP); }
+      if($('#pwd-low').checked){ pool += LO; groups.push(LO); }
+      if($('#pwd-num').checked){ pool += NU; groups.push(NU); }
+      if($('#pwd-sym').checked){ pool += SY; groups.push(SY); }
+      if(!pool){ window.toast('至少勾选一项'); return; }
+      const arr = [];
+      // ensure at least one from each group
+      for(const g of groups) arr.push(g[randInt(g.length)]);
+      while(arr.length < len) arr.push(pool[randInt(pool.length)]);
+      // shuffle
+      for(let i = arr.length - 1; i > 0; i--){
+        const j = randInt(i + 1); [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      $('#pwd-out').value = arr.join('');
+    }
+    $('#pwd-gen').addEventListener('click', genPwd);
+    $('#pwd-copy').addEventListener('click', () => {
+      const v = $('#pwd-out').value; if(!v) return window.toast('请先生成');
+      window.copyText(v).then(ok => ok && window.toast('已复制'));
+    });
+    genPwd();
+
+    // ---- Timestamp ----
+    function tickTS(){
+      const ms = Date.now(); const s = Math.floor(ms / 1000);
+      $('#ts-now-s').textContent = s;
+      $('#ts-now-ms').textContent = ms;
+    }
+    setInterval(tickTS, 1000); tickTS();
+    $('#ts-in').addEventListener('input', () => {
+      const v = $('#ts-in').value.trim();
+      if(!v){ $('#ts-out').textContent = ''; return; }
+      let n = Number(v);
+      if(isNaN(n)){ $('#ts-out').textContent = '非数字'; return; }
+      if(v.length <= 10) n = n * 1000;
+      const d = new Date(n);
+      if(Number.isNaN(d.getTime())){ $('#ts-out').textContent = '无效时间戳'; return; }
+      $('#ts-out').innerHTML = `本地时间 <b>${d.toLocaleString()}</b><br>UTC <b>${d.toUTCString()}</b><br>ISO <b>${d.toISOString()}</b>`;
+    });
+    $('#dt-in').addEventListener('input', () => {
+      const v = $('#dt-in').value;
+      if(!v){ $('#dt-out').textContent = ''; return; }
+      const t = new Date(v).getTime();
+      if(Number.isNaN(t)){ $('#dt-out').textContent = '无效日期'; return; }
+      $('#dt-out').innerHTML = `秒 <b>${Math.floor(t/1000)}</b> · 毫秒 <b>${t}</b>`;
+    });
+
+    // ---- Hash ----
+    document.querySelectorAll('[data-hash]').forEach(b => b.addEventListener('click', async () => {
+      const algo = b.dataset.hash;
+      const data = new TextEncoder().encode($('#hash-in').value);
+      const buf = await crypto.subtle.digest(algo, data);
+      const hex = Array.from(new Uint8Array(buf), x => x.toString(16).padStart(2,'0')).join('');
+      $('#hash-name').textContent = algo;
+      $('#hash-out').textContent = hex;
+    }));
+
+    // ---- QR ----
+    let lastQR = null;
+    $('#qr-gen').addEventListener('click', () => {
+      const t = $('#qr-text').value.trim();
+      if(!t){ return window.toast('请输入内容'); }
+      const box = $('#qr-box');
+      box.innerHTML = '';
+      lastQR = new QRCode(box, { text: t, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.M });
+    });
+    $('#qr-download').addEventListener('click', () => {
+      if(!lastQR){ return window.toast('请先生成'); }
+      const cv = $('#qr-box canvas');
+      const img = $('#qr-box img');
+      const src = cv ? cv.toDataURL('image/png') : (img ? img.src : null);
+      if(!src) return;
+      const a = document.createElement('a');
+      a.href = src; a.download = 'qrcode.png';
+      document.body.appendChild(a); a.click(); a.remove();
+    });
+
+    // ---- JWT decoder ----
+    function b64urlDecode(str){
+      str = str.replace(/-/g, '+').replace(/_/g, '/');
+      while(str.length % 4) str += '=';
+      try {
+        return decodeURIComponent(escape(atob(str)));
+      } catch(e){
+        return atob(str); // raw bytes for signature
+      }
+    }
+    function tryFormatJson(text){
+      try { return JSON.stringify(JSON.parse(text), null, 2); }
+      catch(e){ return text; }
+    }
+    $('#jwt-decode').addEventListener('click', () => {
+      const raw = $('#jwt-in').value.trim();
+      const parts = raw.split('.');
+      if(parts.length !== 3){
+        $('#jwt-out').innerHTML = '<div class="tip" style="color:var(--danger)">不是合法的 JWT（应当有 3 段，以 . 分隔）</div>';
+        return;
+      }
+      let header, payload;
+      try { header = b64urlDecode(parts[0]); } catch(e){ $('#jwt-out').innerHTML = '<div class="tip" style="color:var(--danger)">Header 解码失败</div>'; return; }
+      try { payload = b64urlDecode(parts[1]); } catch(e){ $('#jwt-out').innerHTML = '<div class="tip" style="color:var(--danger)">Payload 解码失败</div>'; return; }
+      let payloadObj = null;
+      try { payloadObj = JSON.parse(payload); } catch(e){}
+      let extras = '';
+      if(payloadObj){
+        const now = Math.floor(Date.now() / 1000);
+        if(payloadObj.exp){
+          const expDate = new Date(payloadObj.exp * 1000).toLocaleString();
+          const expired = payloadObj.exp < now;
+          extras += `<div class="kv"><span class="label">exp</span><span class="value ${expired?'':''}" style="color:${expired?'var(--danger)':'var(--accent)'}">${expDate} ${expired?'(已过期)':'(有效)'}</span></div>`;
+        }
+        if(payloadObj.iat){
+          extras += `<div class="kv"><span class="label">iat</span><span class="value">${new Date(payloadObj.iat * 1000).toLocaleString()}</span></div>`;
+        }
+        if(payloadObj.nbf){
+          extras += `<div class="kv"><span class="label">nbf</span><span class="value">${new Date(payloadObj.nbf * 1000).toLocaleString()}</span></div>`;
+        }
+      }
+      $('#jwt-out').innerHTML = `
+        <div class="jwt-section head"><h4>Header</h4><pre>${escapeHtml(tryFormatJson(header))}</pre></div>
+        <div class="jwt-section payload"><h4>Payload</h4><pre>${escapeHtml(tryFormatJson(payload))}</pre></div>
+        <div class="jwt-section sig"><h4>Signature (Base64URL)</h4><pre>${escapeHtml(parts[2])}</pre></div>
+        ${extras ? '<div class="tip" style="margin-top:8px">' + extras + '</div>' : ''}
+      `;
+    });
+    function escapeHtml(s){
+      return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    // ---- Color converter ----
+    function hexToRgb(hex){
+      const m = hex.replace('#','').match(/^([0-9a-f]{3}|[0-9a-f]{6})$/i);
+      if(!m) return null;
+      let h = m[1];
+      if(h.length === 3) h = h.split('').map(c => c+c).join('');
+      return { r: parseInt(h.slice(0,2), 16), g: parseInt(h.slice(2,4), 16), b: parseInt(h.slice(4,6), 16) };
+    }
+    function rgbToHex(r,g,b){
+      const c = n => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2,'0');
+      return ('#' + c(r) + c(g) + c(b)).toUpperCase();
+    }
+    function rgbToHsl(r, g, b){
+      r/=255; g/=255; b/=255;
+      const max=Math.max(r,g,b), min=Math.min(r,g,b);
+      let h, s, l=(max+min)/2;
+      if(max===min){ h=s=0; }
+      else {
+        const d = max-min;
+        s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+        switch(max){
+          case r: h=(g-b)/d + (g<b?6:0); break;
+          case g: h=(b-r)/d + 2; break;
+          case b: h=(r-g)/d + 4; break;
+        }
+        h /= 6;
+      }
+      return { h: Math.round(h*360), s: Math.round(s*100), l: Math.round(l*100) };
+    }
+    function hslToRgb(h, s, l){
+      h/=360; s/=100; l/=100;
+      let r, g, b;
+      if(s===0){ r=g=b=l; }
+      else {
+        const hue2rgb = (p,q,t) => {
+          if(t<0) t+=1; if(t>1) t-=1;
+          if(t<1/6) return p+(q-p)*6*t;
+          if(t<1/2) return q;
+          if(t<2/3) return p+(q-p)*(2/3-t)*6;
+          return p;
+        };
+        const q = l<0.5 ? l*(1+s) : l+s-l*s;
+        const p = 2*l-q;
+        r = hue2rgb(p,q,h+1/3); g = hue2rgb(p,q,h); b = hue2rgb(p,q,h-1/3);
+      }
+      return { r: Math.round(r*255), g: Math.round(g*255), b: Math.round(b*255) };
+    }
+    function rgbToHsv(r, g, b){
+      r/=255; g/=255; b/=255;
+      const max=Math.max(r,g,b), min=Math.min(r,g,b);
+      let h, s, v=max;
+      const d = max-min;
+      s = max===0 ? 0 : d/max;
+      if(max===min){ h=0; }
+      else {
+        switch(max){
+          case r: h=(g-b)/d + (g<b?6:0); break;
+          case g: h=(b-r)/d + 2; break;
+          case b: h=(r-g)/d + 4; break;
+        }
+        h /= 6;
+      }
+      return { h: Math.round(h*360), s: Math.round(s*100), v: Math.round(v*100) };
+    }
+    let colorUpdating = false;
+    function applyColor(rgb){
+      if(colorUpdating) return;
+      colorUpdating = true;
+      const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+      const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+      const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+      $('#color-swatch').style.background = hex;
+      $('#color-hex').value = hex;
+      $('#color-rgb').value = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+      $('#color-hsl').value = `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`;
+      $('#color-hsv').value = `hsv(${hsv.h}, ${hsv.s}%, ${hsv.v}%)`;
+      $('#color-picker').value = hex;
+      colorUpdating = false;
+    }
+    $('#color-hex').addEventListener('input', (e) => {
+      const rgb = hexToRgb(e.target.value);
+      if(rgb) applyColor(rgb);
+    });
+    $('#color-rgb').addEventListener('input', (e) => {
+      const m = e.target.value.match(/(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)/);
+      if(!m) return;
+      const r = +m[1], g = +m[2], b = +m[3];
+      if([r,g,b].some(v => v < 0 || v > 255)){ window.toast('RGB 每个分量须在 0–255 之间'); return; }
+      applyColor({ r, g, b });
+    });
+    $('#color-hsl').addEventListener('input', (e) => {
+      const m = e.target.value.match(/(-?\d+)\s*,\s*(-?\d+)\%?\s*,\s*(-?\d+)\%?/);
+      if(!m) return;
+      const h = +m[1], s = +m[2], l = +m[3];
+      if(h < 0 || h > 360 || s < 0 || s > 100 || l < 0 || l > 100){ window.toast('HSL 范围：H 0–360，S/L 0–100'); return; }
+      applyColor(hslToRgb(h, s, l));
+    });
+    $('#color-picker').addEventListener('input', (e) => {
+      const rgb = hexToRgb(e.target.value);
+      if(rgb) applyColor(rgb);
+    });
+    $('#color-random').addEventListener('click', () => {
+      applyColor({ r: Math.floor(Math.random()*256), g: Math.floor(Math.random()*256), b: Math.floor(Math.random()*256) });
+    });
+    $('#color-copy').addEventListener('click', () => {
+      window.copyText($('#color-hex').value).then(ok => ok && window.toast('已复制 HEX'));
+    });
+
+    // ---- Number base converter (BigInt, arbitrary precision) ----
+    const DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    function validBaseValue(value, base){
+      const signless = value.replace(/^[+-]/, '');
+      const allowed = DIGITS.slice(0, base);
+      return signless.length > 0 && [...signless.toUpperCase()].every(ch => allowed.includes(ch));
+    }
+    function parseBig(value, base){
+      const neg = /^-/.test(value);
+      const signless = value.replace(/^[+-]/, '').toUpperCase();
+      const b = BigInt(base);
+      let n = 0n;
+      for(const ch of signless){
+        const d = DIGITS.indexOf(ch);
+        if(d < 0 || d >= base) throw new Error('bad digit');
+        n = n * b + BigInt(d);
+      }
+      return neg ? -n : n;
+    }
+    function bigToBase(n, base){
+      if(n === 0n) return '0';
+      const neg = n < 0n;
+      let x = neg ? -n : n;
+      const b = BigInt(base);
+      let out = '';
+      while(x > 0n){
+        out = DIGITS[Number(x % b)] + out;
+        x = x / b;
+      }
+      return (neg ? '-' : '') + out;
+    }
+
+    let numUpdating = false;
+    function setBases(decBig){
+      if(numUpdating) return;
+      numUpdating = true;
+      $('#num-10').value = bigToBase(decBig, 10);
+      $('#num-16').value = bigToBase(decBig, 16);
+      $('#num-8').value  = bigToBase(decBig, 8);
+      $('#num-2').value  = bigToBase(decBig, 2);
+      numUpdating = false;
+    }
+    function bindBase(id, base){
+      $(id).addEventListener('input', (e) => {
+        const v = e.target.value.trim();
+        if(v === '') return;
+        if(!validBaseValue(v, base)) return;
+        try { setBases(parseBig(v, base)); } catch(_){}
+      });
+    }
+    bindBase('#num-10', 10);
+    bindBase('#num-16', 16);
+    bindBase('#num-8', 8);
+    bindBase('#num-2', 2);
+    setBases(2026n);
+
+    $('#num-convert').addEventListener('click', () => {
+      const fromBase = Math.max(2, Math.min(36, parseInt($('#num-from-base').value, 10) || 10));
+      const toBase   = Math.max(2, Math.min(36, parseInt($('#num-to-base').value, 10) || 10));
+      const val = $('#num-from-val').value.trim();
+      if(!val){ window.toast('请输入数字'); return; }
+      if(!validBaseValue(val, fromBase)){ window.toast('输入数字与所选进制不匹配'); return; }
+      try {
+        $('#num-to-val').value = bigToBase(parseBig(val, fromBase), toBase);
+      } catch(_){ window.toast('输入数字与所选进制不匹配'); }
+    });
+  })();
+  </script>
+    </main>
+  </div>
+</body>
+</html>

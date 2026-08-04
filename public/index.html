@@ -8,7 +8,7 @@
   <meta name="description" content="开源 2FA / TOTP 多账号管理器，支持扫码导入、相册导入、Base32 手动添加。">
   <link rel="icon" type="image/svg+xml" href="/assets/img/favicon.svg">
   <link rel="stylesheet" href="/assets/css/style.css">
-  <link rel="stylesheet" href="/assets/css/ui-v4.css">
+  <link rel="stylesheet" href="/assets/css/ui-v4.css?v=20260804">
   <script src="/assets/js/otpauth.umd.min.js"></script>
   <script src="/assets/js/qrcode.min.js"></script>
   <script src="/assets/js/jsQR.js"></script>
@@ -109,13 +109,14 @@
     }
 
     // Normalize a Base32 secret: drop whitespace and the separators services
-    // commonly print (hyphens / underscores), strip trailing "=" padding, upcase.
-    // Padding and hyphens are display sugar — the decoder must not see them.
+    // commonly print (hyphens / underscores), strip "=" padding and any stray
+    // quotes (e.g. pasted from a shell command), upcase.
+    // Padding, hyphens and quotes are display sugar — the decoder must not see them.
     function normSecret(raw){
       return String(raw || '')
         .replace(/[\s\-_]+/g, '')
         .toUpperCase()
-        .replace(/=+$/, '');
+        .replace(/[=\s'"`]+/g, '');
     }
 
     // Minimum length: RFC 4648 Base32 needs 8 chars to carry a 5-byte key,
@@ -125,7 +126,9 @@
 
     function validateSecret(raw){
       const s = normSecret(raw);
-      if(!s) return null;
+      // Empty / whitespace-only input must not fail silently — the add and
+      // "view once" buttons both give no feedback today, which looks broken.
+      if(!s){ window.toast('请填写密钥'); return null; }
       if(s.length < SECRET_MIN){ window.toast('密钥太短，至少 ' + SECRET_MIN + ' 位 Base32'); return null; }
       if(s.length > 128){ window.toast('密钥过长'); return null; }
       if(!/^[A-Z2-7]+$/.test(s)){ window.toast('非法 Base32：只允许 A–Z 与 2–7'); return null; }
