@@ -35,17 +35,10 @@
           return `<a class="${isActive?'active':''}" href="${n.href}" data-page="${n.page}" data-spa><span class="ico" aria-hidden="true">${n.ico}</span><span>${n.label}</span></a>`;
         }).join('')}
       </nav>
-      <div class="side-tools">
-        <a class="icon-btn" href="https://github.com/Minis233/totp-tools" target="_blank" rel="noopener" title="GitHub 源码" aria-label="GitHub">${ICONS.github}</a>
-      </div>
     `;
   }
 
   // ---------- Theme ----------
-  // 固定浅色主题，仅保留 GitHub 图标
-  const ICONS = {
-    github: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 .5C5.6.5.5 5.6.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2.1c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2.9-.3 1.9-.4 2.9-.4s2 .1 2.9.4c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.7.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.6 18.4.5 12 .5z"/></svg>',
-  };
   // 固定浅色主题
   function setTheme(){
     document.documentElement.setAttribute('data-theme', 'light');
