@@ -181,6 +181,18 @@
     const $ = s => document.querySelector(s);
     const $$ = s => [...document.querySelectorAll(s)];
 
+    // 给 fetch 加超时，避免请求挂起时 loading 永久卡死
+    function fetchWithTimeout(url, options = {}, timeoutMs = 15000){
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const opts = Object.assign({}, options, { signal: controller.signal });
+      // 若调用方已传 signal，则二者都触发时 abort
+      if(options.signal){
+        options.signal.addEventListener('abort', () => controller.abort());
+      }
+      return fetch(url, opts).finally(() => clearTimeout(timer));
+    }
+
     const CURRENCY_NAMES = {
 
       USD: "美元",
@@ -375,7 +387,7 @@
         async loadSupported(){
           if(this.SUPPORTED) return this.SUPPORTED;
           try{
-            const resp = await fetch('https://api.frankfurter.dev/v1/currencies');
+            const resp = await fetchWithTimeout('https://api.frankfurter.dev/v1/currencies', {}, 8000);
             if(resp.ok){
               const data = await resp.json();
               this.SUPPORTED = new Set(Object.keys(data || {}));
@@ -385,7 +397,7 @@
           this.SUPPORTED = new Set(['AUD','BRL','CAD','CHF','CNY','CZK','DKK','EUR','GBP','HKD','HUF','IDR','ILS','INR','ISK','JPY','KRW','MXN','MYR','NOK','NZD','PHP','PLN','RON','SEK','SGD','THB','TRY','USD','ZAR']);
           return this.SUPPORTED;
         },
-        async fetch(base){
+        async fetch(base, { signal } = {}){
           const supported = await this.loadSupported();
           let b = String(base || 'USD').toUpperCase();
           if(!supported.has(b)) b = supported.has('USD') ? 'USD' : 'EUR';
@@ -396,7 +408,7 @@
           let lastErr = null;
           for(const url of endpoints){
             try{
-              const resp = await fetch(url);
+              const resp = await fetchWithTimeout(url, { signal }, 12000);
               if(!resp.ok){ lastErr = new Error('HTTP ' + resp.status); continue; }
               const data = await resp.json();
               const rates = Object.assign({}, data.rates || {});
@@ -422,9 +434,9 @@
       open: {
         label: '全球 · open.er-api',
         hint: '全球 160+ 法币综合参考价（open.er-api），适合覆盖冷门币种。',
-        async fetch(base){
+        async fetch(base, { signal } = {}){
           const url = `https://open.er-api.com/v6/latest/${encodeURIComponent(base)}`;
-          const resp = await fetch(url);
+          const resp = await fetchWithTimeout(url, { signal }, 12000);
           if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
           const data = await resp.json();
           if(data.result && data.result !== 'success') throw new Error(data['error-type'] || 'open.er-api error');
@@ -437,11 +449,11 @@
       wise: {
         label: 'Wise · mid-market',
         hint: 'Wise 中间市场价（mid-market，不含手续费）。当前接口可稳定获取约 160+ 种报价；切换时先显示预载数据，再后台补全。',
-        async fetch(base, { onPartial } = {}){
+        async fetch(base, { onPartial, signal } = {}){
           const rates = { [base]: 1 };
           let date = '';
           const size = 50;
-          const firstResp = await fetch(`/api/wise-rates?source=${encodeURIComponent(base)}&page=0&size=${size}`, { cache: 'no-store' });
+          const firstResp = await fetchWithTimeout(`/api/wise-rates?source=${encodeURIComponent(base)}&page=0&size=${size}`, { cache: 'no-store', signal }, 20000);
           const firstData = await firstResp.json().catch(() => ({}));
           if(!firstResp.ok) throw new Error(firstData.error || `HTTP ${firstResp.status}`);
           if(!firstData.rates || Object.keys(firstData.rates).length < 4) throw new Error('Wise 返回数据不足');
@@ -456,7 +468,7 @@
           const totalPages = Math.max(1, Number(firstData.totalPages) || 1);
           const pageJobs = [];
           for(let page = 1; page < totalPages; page++){
-            pageJobs.push(fetch(`/api/wise-rates?source=${encodeURIComponent(base)}&page=${page}&size=${size}`, { cache: 'no-store' })
+            pageJobs.push(fetchWithTimeout(`/api/wise-rates?source=${encodeURIComponent(base)}&page=${page}&size=${size}`, { cache: 'no-store', signal }, 20000)
               .then(async resp => ({ ok: resp.ok, data: await resp.json().catch(() => ({})) }))
               .catch(() => ({ ok: false, data: {} })));
           }
@@ -470,7 +482,12 @@
             if(result.data.date) date = result.data.date;
           }
           if(failedPages){
-            throw new Error(`Wise 有 ${failedPages} 页暂时不可用`);
+            // 部分页失败不抛错：用已有数据降级返回，避免整个刷新失败
+            const finalLabel2 = usedFallback ? '含最近快照' : (failedPages ? `（${failedPages} 页未补全）` : '已补全');
+            if(typeof onPartial === 'function' && pages.length){
+              onPartial({ base, date, rates: Object.assign({}, rates), source: `Wise mid-market · ${Object.keys(rates).length} 种（${finalLabel2}）`, partial: true });
+            }
+            return { base, date, rates, source: `Wise mid-market · ${Object.keys(rates).length} 种${usedFallback ? ' · 含最近快照' : ' · 部分未补全'}`, partial: false };
           }
           const finalLabel = usedFallback ? '含最近快照' : '已补全';
           if(typeof onPartial === 'function' && pages.length){
@@ -487,6 +504,7 @@
     let activeBase = 'USD';
     let loading = false;
     let requestSeq = 0;
+    let activeAbort = null; // 当前进行中请求的 AbortController，用于打断
     let rateFilter = '';
     let lastEdit = 'from'; // which amount field user last edited
 
@@ -717,7 +735,7 @@
         const old = JSON.parse(localStorage.getItem(key) || 'null');
         const oldCount = old?.data?.rates ? Object.keys(old.data.rates).length : 0;
         if(oldCount >= 50 && Date.now() - (old.savedAt || 0) < 12 * 60 * 60 * 1000) return;
-        const resp = await fetch(`/api/wise-rates?source=${encodeURIComponent(b)}&page=0&size=50`, { cache: 'force-cache' });
+        const resp = await fetchWithTimeout(`/api/wise-rates?source=${encodeURIComponent(b)}&page=0&size=50`, { cache: 'force-cache' }, 20000);
         const page = await resp.json().catch(() => ({}));
         if(!resp.ok || !page.rates || Object.keys(page.rates).length < 4) return;
         const data = { base: page.base || b, date: page.date || '', rates: page.rates, source: `Wise mid-market · ${Object.keys(page.rates).length} 种（预载）`, partial: true };
@@ -878,7 +896,13 @@
       const silent = !!opts.silent;
       const selectedProvider = provider;
       const seq = ++requestSeq;
+      // 强制刷新：先打断上一次可能卡住的请求，避免 loading 永久卡死
+      if(opts.force){
+        if(activeAbort){ try{ activeAbort.abort(); }catch(_e){} activeAbort = null; }
+        loading = false;
+      }
       if(loading && !opts.force) return;
+      activeAbort = new AbortController();
       loading = true;
       if(!silent){
         if(rates && rates.rates && Object.keys(rates.rates).length > 1){
@@ -898,12 +922,17 @@
               applyData(partial);
             }
           : null;
-        const data = await PROVIDERS[selectedProvider].fetch(base, { onPartial });
+        const data = await PROVIDERS[selectedProvider].fetch(base, { onPartial, signal: activeAbort.signal });
         if(seq !== requestSeq || selectedProvider !== provider) return;
         applyData(data);
         if(autoEnabled) leftSec = autoSec;
       }catch(e){
         if(seq !== requestSeq || selectedProvider !== provider) return;
+        if(e && e.name === 'AbortError'){
+          // 被新请求打断：静默，不显示错误
+          if(loading){ loading = false; updateCountdownUI(); }
+          return;
+        }
         if(!rates){
           $('#status').textContent = '加载失败：' + (e.message || e);
           $('#rateTable').innerHTML = '';
@@ -913,6 +942,7 @@
       }finally{
         if(seq === requestSeq){
           loading = false;
+          if(activeAbort) activeAbort = null;
           updateCountdownUI();
         }
       }
@@ -951,7 +981,7 @@
       }
     });
 
-    $('#refresh').addEventListener('click', () => fetchRates(comboFrom.get()));
+    $('#refresh').addEventListener('click', () => fetchRates(comboFrom.get(), { force: true }));
     $('#rateSearch').addEventListener('input', e => { rateFilter = e.target.value || ''; renderTable(); });
 
     $$('#providerTabs .tab').forEach(btn => {
@@ -961,6 +991,7 @@
         provider = p;
         requestSeq += 1;
         loading = false;
+        if(activeAbort){ try{ activeAbort.abort(); }catch(_e){} activeAbort = null; }
         localStorage.setItem('fx.provider', provider);
         setProviderUI();
         // Instant paint from provider cache (Wise especially)
@@ -1107,6 +1138,7 @@
         provider = p;
         requestSeq += 1;
         loading = false;
+        if(activeAbort){ try{ activeAbort.abort(); }catch(_e){} activeAbort = null; }
         localStorage.setItem('fx.provider', provider);
         // keep fx page tabs in sync if present
         document.querySelectorAll('#providerTabs .tab').forEach(btn => {
