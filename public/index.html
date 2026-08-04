@@ -113,8 +113,15 @@
     // quotes (e.g. pasted from a shell command), upcase.
     // Padding, hyphens and quotes are display sugar — the decoder must not see them.
     function normSecret(raw){
+      // Invisible Unicode chars (zero-width space U+200B, ZWJ U+200D,
+      // soft hyphen U+00AD, BOM U+FEFF, LRM/RLM U+200E/F, word joiner U+2060,
+      // Arabic letter mark U+061C, full-width space U+3000, ...) piggyback on
+      // text copied from chats/websites/PDFs and break Base32 decoding.
+      // \s alone misses most of these — strip them explicitly by code point.
+      const UNICODE_INVISIBLE = /[\u200B\u200C\u200D\u2060\u2064\u00AD\u061C\u200E\u200F\uFEFF\u3000\u202F\u1680\u180E\u205F]/g;
       return String(raw || '')
         .replace(/[\s\-_]+/g, '')
+        .replace(UNICODE_INVISIBLE, '')
         .toUpperCase()
         .replace(/[=\s'"`]+/g, '');
     }
