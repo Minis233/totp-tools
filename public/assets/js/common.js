@@ -27,7 +27,6 @@
     const container = document.querySelector('[data-sidebar]');
     if(!container) return;
     const active = currentPage();
-    const theme = getTheme();
     container.innerHTML = `
       <div class="brand"><span class="brand-dot"></span><span>在线工具</span></div>
       <nav>
@@ -37,37 +36,22 @@
         }).join('')}
       </nav>
       <div class="side-tools">
-        <button class="icon-btn" id="theme-toggle" title="切换主题（自动 / 浅色 / 深色）" aria-label="切换主题">${themeIcon(theme)}</button>
         <a class="icon-btn" href="https://github.com/Minis233/totp-tools" target="_blank" rel="noopener" title="GitHub 源码" aria-label="GitHub">${ICONS.github}</a>
       </div>
     `;
-    container.querySelector('#theme-toggle').addEventListener('click', cycleTheme);
   }
 
   // ---------- Theme ----------
-  const THEMES = ['auto', 'light', 'dark'];
+  // 固定浅色主题，仅保留 GitHub 图标
   const ICONS = {
-    auto:   '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18"/><path d="M12 3a9 9 0 0 1 0 18"/></svg>',
-    light:  '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>',
-    dark:   '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>',
     github: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 .5C5.6.5.5 5.6.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2.1c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2.9-.3 1.9-.4 2.9-.4s2 .1 2.9.4c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.7.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.6 18.4.5 12 .5z"/></svg>',
   };
-  function getTheme(){ try { return localStorage.getItem('app.theme') || 'auto'; } catch(e){ return 'auto'; } }
-  function setTheme(t){
-    document.documentElement.setAttribute('data-theme', t);
-    try { localStorage.setItem('app.theme', t); } catch(e){}
-  }
-  function themeIcon(t){ return ICONS[t] || ICONS.auto; }
-  function cycleTheme(){
-    const cur = getTheme();
-    const next = THEMES[(THEMES.indexOf(cur) + 1) % THEMES.length];
-    setTheme(next);
-    const btn = document.getElementById('theme-toggle');
-    if(btn){ btn.innerHTML = themeIcon(next); btn.title = `当前：${next === 'auto' ? '自动' : next === 'light' ? '浅色' : '深色'}（点击切换）`; }
-    window.toast && window.toast(next === 'auto' ? '主题：跟随系统' : next === 'light' ? '主题：浅色' : '主题：深色');
+  // 固定浅色主题
+  function setTheme(){
+    document.documentElement.setAttribute('data-theme', 'light');
   }
   // Apply theme as early as possible to avoid flash
-  setTheme(getTheme());
+  setTheme();
 
   // ---------- Notification ----------
   function ensureContainer(){
