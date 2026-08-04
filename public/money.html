@@ -97,7 +97,6 @@
               <button type="button" class="tab active" data-fee-mode="pct">实扣</button>
               <button type="button" class="tab" data-fee-mode="amt">费率</button>
             </div>
-            <p id="feeModeHint" class="muted small fx-hint">例：消费 100 CNY，银行实扣 14.8 USD。可在下方切换汇率来源。</p>
 
             <div class="fee-rate-box">
               <div class="fee-rate-label">汇率来源</div>
@@ -1159,12 +1158,6 @@
         document.querySelectorAll('#feeModeTabs .tab').forEach(btn => {
           btn.classList.toggle('active', btn.dataset.feeMode === feeMode);
         });
-        const hint = document.getElementById('feeModeHint');
-        if(hint){
-          hint.textContent = feeMode === 'pct'
-            ? '例：消费 100 CNY，银行实扣 14.8 USD。选择汇率来源后用中间价换算比较。'
-            : '输入应付金额、实际支付币种与损耗百分比。跨币种时先按中间价换算再算损耗。';
-        }
         calcFee();
       }
 
