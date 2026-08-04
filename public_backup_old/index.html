@@ -67,7 +67,6 @@
     // -------- state --------
     let accounts = [];
     let needsResave = false;
-    const seenIds = new Set();
     try {
       const stored = JSON.parse(STORAGE.getItem(LS_KEY) || '[]');
       accounts = Array.isArray(stored)
@@ -76,20 +75,8 @@
             .map(a => {
               const meta = sanitizeMeta(a.algorithm, a.digits, a.period);
               if(a.algorithm !== meta.algorithm || a.digits !== meta.digits || a.period !== meta.period) needsResave = true;
-              // Records saved by older builds (or hand-edited JSON) may lack a
-              // usable id. Without one every card renders data-id="undefined",
-              // so copy/edit/delete all resolve to the first match.
-              let id = typeof a.id === 'string' ? a.id.trim() : '';
-              if(!id || seenIds.has(id)){ id = newId(); needsResave = true; }
-              else seenIds.add(id);
-              // Normalize the stored secret too. Records written by older builds
-              // (or hand-edited exports) can still carry padding / hyphens, and
-              // the decoder throws on those — every code showed "错误".
-              const secret = normSecret(a.secret);
-              if(secret !== a.secret) needsResave = true;
-              return { ...a, id, secret, algorithm: meta.algorithm, digits: meta.digits, period: meta.period };
+              return { ...a, algorithm: meta.algorithm, digits: meta.digits, period: meta.period };
             })
-            .filter(a => a.secret && /^[A-Z2-7]+$/.test(a.secret))
         : [];
     } catch(e){ accounts = []; }
     const save = () => STORAGE.setItem(LS_KEY, JSON.stringify(accounts));
@@ -98,40 +85,14 @@
 
     function uid(){ return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
 
-    // Always allocate ids through here so a fresh id can never collide with one
-    // already held by an existing account (uid() is time+random, but bulk
-    // imports run inside the same millisecond).
-    function newId(){
-      let id = uid();
-      while(seenIds.has(id)) id = uid();
-      seenIds.add(id);
-      return id;
-    }
-
-    // Normalize a Base32 secret: drop whitespace and the separators services
-    // commonly print (hyphens / underscores), strip trailing "=" padding, upcase.
-    // Padding and hyphens are display sugar — the decoder must not see them.
-    function normSecret(raw){
-      return String(raw || '')
-        .replace(/[\s\-_]+/g, '')
-        .toUpperCase()
-        .replace(/=+$/, '');
-    }
-
-    // Minimum length: RFC 4648 Base32 needs 8 chars to carry a 5-byte key,
-    // which is the shortest secret real services issue. Rejecting under 16
-    // locked out valid accounts.
-    const SECRET_MIN = 8;
+    function normSecret(raw){ return String(raw || '').replace(/\s+/g, '').toUpperCase(); }
 
     function validateSecret(raw){
       const s = normSecret(raw);
       if(!s) return null;
-      if(s.length < SECRET_MIN){ window.toast('密钥太短，至少 ' + SECRET_MIN + ' 位 Base32'); return null; }
+      if(s.length < 16){ window.toast('密钥太短，至少 16 位 Base32'); return null; }
       if(s.length > 128){ window.toast('密钥过长'); return null; }
       if(!/^[A-Z2-7]+$/.test(s)){ window.toast('非法 Base32：只允许 A–Z 与 2–7'); return null; }
-      // Final gate: let the decoder confirm it is actually decodable.
-      try { OTPAuth.Secret.fromBase32(s); }
-      catch(e){ window.toast('密钥无法解析为 Base32'); return null; }
       return s;
     }
 
@@ -332,7 +293,7 @@
       if(!s) return false;
       const meta = sanitizeMeta(extra.algorithm, extra.digits, extra.period);
       accounts.push({
-        id: newId(),
+        id: uid(),
         remark: (remark || '未命名').trim(),
         issuer: extra.issuer || '',
         secret: s,
@@ -386,15 +347,13 @@
         const type = u.host.toLowerCase(); // totp / hotp
         if(type !== 'totp') throw new Error('暂不支持 ' + type.toUpperCase());
         const labelRaw = decodeURIComponent(u.pathname.replace(/^\//, ''));
-        // Label is "Issuer:Account". Only the FIRST colon separates the two —
-        // account names are often emails or contain colons, and splitting on
-        // every colon truncated them (e.g. "GitHub:user:extra@x.com" -> "user").
+        // label can be "Issuer:Account" — split
         let issuer = u.searchParams.get('issuer') || '';
         let remark = labelRaw;
-        const sep = labelRaw.indexOf(':');
-        if(sep > -1){
-          issuer = issuer || labelRaw.slice(0, sep).trim();
-          remark = labelRaw.slice(sep + 1).trim();
+        if(labelRaw.includes(':')){
+          const [iss, acc] = labelRaw.split(':');
+          issuer = issuer || iss;
+          remark = acc.trim();
         }
         const secret = normSecret(u.searchParams.get('secret') || '');
         if(!secret){ throw new Error('二维码中缺少 secret'); }
@@ -504,15 +463,12 @@
           const data = JSON.parse(reader.result);
           if(!Array.isArray(data)) throw new Error('文件格式不正确');
           let n = 0;
-          let skipped = 0;
           for(const a of data){
-            const s = normSecret(a && a.secret);
-            // Same rules as manual add / QR import, but silent per-record so one
-            // bad row can't spam toasts or abort the whole file.
-            if(!s || s.length < SECRET_MIN || s.length > 128 || !/^[A-Z2-7]+$/.test(s)){ skipped++; continue; }
+            const s = normSecret(a.secret);
+            if(!s || !/^[A-Z2-7]+$/.test(s)) continue;
             const meta = sanitizeMeta(a.algorithm, a.digits, a.period);
             accounts.push({
-              id: newId(),
+              id: uid(),
               remark: a.remark || a.label || '未命名',
               issuer: a.issuer || '',
               secret: s,
@@ -523,7 +479,7 @@
             n++;
           }
           save(); render();
-          window.toast(skipped ? `已导入 ${n} 个账号，跳过 ${skipped} 条无效记录` : '已导入 ' + n + ' 个账号');
+          window.toast('已导入 ' + n + ' 个账号');
         } catch(err){
           window.toast('导入失败：' + err.message);
         }
